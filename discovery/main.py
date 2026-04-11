@@ -26,11 +26,8 @@ from scrapers.smartrecruiters import SmartRecruitersScraper
 from scrapers.workable import WorkableScraper
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-CONFIG_DIR = PROJECT_ROOT / "config"
-STATE_DIR = PROJECT_ROOT / "state"
-OUTPUT_DIR = PROJECT_ROOT / "output"
-STATE_FILE = STATE_DIR / "seen-jobs.json"
+PROJECT_ROOT = Path(__file__).resolve().parent      # discovery/
+REPO_ROOT = PROJECT_ROOT.parent                      # jobhunter-framework/
 
 SCRAPER_REGISTRY = {
     "greenhouse": GreenhouseScraper(),
@@ -46,17 +43,48 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def load_state() -> dict:
-    if STATE_FILE.exists():
-        with STATE_FILE.open() as f:
+def load_framework_config(explicit_path: Path | None = None) -> dict:
+    """Optional framework-level config.yaml at repo root. Empty dict if absent."""
+    path = explicit_path or (REPO_ROOT / "config.yaml")
+    if not path.exists():
+        return {}
+    try:
+        return yaml.safe_load(path.read_text()) or {}
+    except Exception as e:
+        logging.warning("Failed to read %s: %s", path, e)
+        return {}
+
+
+def resolve_paths(framework_config: dict) -> tuple[Path, Path, Path]:
+    """Resolve (config_dir, state_file, digest_dir) honoring framework-config overrides.
+
+    Defaults keep the discovery tool usable standalone from its own directory.
+    """
+    disco = framework_config.get("discovery") or {}
+
+    raw_cfg = disco.get("config_dir")
+    config_dir = Path(raw_cfg).expanduser() if raw_cfg else PROJECT_ROOT / "config"
+
+    raw_state = disco.get("state_file")
+    state_file = Path(raw_state).expanduser() if raw_state else PROJECT_ROOT / "state" / "seen-jobs.json"
+
+    raw_digest = disco.get("digest_dir")
+    digest_dir = Path(raw_digest).expanduser() if raw_digest else PROJECT_ROOT / "output"
+
+    return config_dir, state_file, digest_dir
+
+
+def load_state(state_file: Path) -> dict:
+    if state_file.exists():
+        with state_file.open() as f:
             return json.load(f)
     return {"seen_ids": [], "last_run": None}
 
 
-def save_state(state: dict) -> None:
-    STATE_DIR.mkdir(exist_ok=True)
+def save_state(state: dict, state_file: Path) -> None:
+    state_file.parent.mkdir(parents=True, exist_ok=True)
     state["last_run"] = datetime.now(timezone.utc).isoformat()
-    with STATE_FILE.open("w") as f:
+    with state_file.open("w") as f:
         json.dump(state, f, indent=2)
 
 
@@ -207,7 +235,7 @@ def fetch_all_jobs(companies: dict, verify_mode: bool = False) -> list[Job]:
     return all_jobs
 
 
-def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict) -> Path:
+def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_dir: Path) -> Path:
     """
     Write a markdown digest.
 
@@ -217,8 +245,8 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict) -> Path
         is_match=False and anti_target_reason="" → silently filtered (not in digest)
     """
     today_str = date.today().isoformat()
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    out_path = OUTPUT_DIR / f"digest-{today_str}.md"
+    digest_dir.mkdir(parents=True, exist_ok=True)
+    out_path = digest_dir / f"digest-{today_str}.md"
 
     matches = sorted([x for x in results if x[2]], key=lambda x: -x[0])
     skipped_anti = [x for x in results if not x[2] and x[3]]
@@ -279,6 +307,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Job Discovery Agent")
     parser.add_argument("--dry-run", action="store_true", help="Run scan but don't update state")
     parser.add_argument("--verify", action="store_true", help="Verify company slugs return results")
+    parser.add_argument("--config", type=Path, default=None,
+                        help="Path to framework config.yaml (default: ../config.yaml relative to this file)")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
@@ -287,10 +317,19 @@ def main() -> int:
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    companies = load_yaml(CONFIG_DIR / "companies.yaml")
-    keywords = load_yaml(CONFIG_DIR / "keywords.yaml")
-    filters = load_yaml(CONFIG_DIR / "filters.yaml")
-    state = load_state()
+    framework_config = load_framework_config(args.config)
+    config_dir, state_file, digest_dir = resolve_paths(framework_config)
+
+    if framework_config:
+        logging.info("Framework config active:")
+        logging.info("  config_dir: %s", config_dir)
+        logging.info("  state_file: %s", state_file)
+        logging.info("  digest_dir: %s", digest_dir)
+
+    companies = load_yaml(config_dir / "companies.yaml")
+    keywords = load_yaml(config_dir / "keywords.yaml")
+    filters = load_yaml(config_dir / "filters.yaml")
+    state = load_state(state_file)
 
     total_companies = sum(1 for _ in iter_company_entries(companies))
 
@@ -328,7 +367,7 @@ def main() -> int:
         "total_fetched": len(all_jobs),
         "new_jobs": len(new_jobs),
     }
-    out_path = write_digest(results, stats)
+    out_path = write_digest(results, stats, digest_dir)
     print(f"Digest written to: {out_path}")
 
     matches_count = sum(1 for _, _, m, _ in results if m)
@@ -337,7 +376,7 @@ def main() -> int:
 
     if not args.dry_run:
         state["seen_ids"] = list(seen_ids | {j.id for j in all_jobs})
-        save_state(state)
+        save_state(state, state_file)
 
     return 0
 
