@@ -28,9 +28,23 @@ Early, actively-developed framework. Roadmap:
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - Python 3.11+ (for job discovery)
-- `pdflatex` (for resume PDF compilation)
+- `pdflatex` with the following TeX Live packages (beyond base `texlive-latex-base`):
+  - `texlive-latex-recommended` — provides `ragged2e`, `microtype`
+  - `texlive-latex-extra` — provides `tabularx`, `enumitem`, `titlesec`, etc.
+  - `texlive-fonts-extra` — provides `fontawesome5`, `CormorantGaramond`, `charter`
 
-See the original `ats-resume-agent` README for LaTeX package details; the same requirements apply here.
+**Debian/Ubuntu/WSL:**
+```bash
+sudo apt-get install texlive-latex-base texlive-latex-recommended \
+  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra
+```
+
+**macOS:**
+```bash
+brew install --cask mactex-no-gui
+```
+
+If `pdflatex` complains about a missing `.sty` file, install the individual package via `tlmgr install <package>` or `tlmgr --usermode install <package>` (no root required).
 
 ## Install
 

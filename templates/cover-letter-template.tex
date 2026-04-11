@@ -2,7 +2,14 @@
 % Cover Letter Template
 %%%%
 % License: MIT
-% Part of the ATS Resume Writer Agent project.
+% Part of the jobhunter-framework project.
+%
+% TeX Live package dependencies (beyond base texlive-latex-base):
+%   texlive-latex-recommended  (ragged2e, microtype)
+%   texlive-fonts-extra        (fontawesome5)
+% On Debian/Ubuntu/WSL, these are usually covered by:
+%   texlive-latex-recommended texlive-latex-extra texlive-fonts-extra
+% Or install individual packages via `tlmgr --usermode install <pkg>`.
 %%%%
 
 \documentclass[11pt, letterpaper, roman]{letter}
@@ -13,9 +20,17 @@
 \usepackage{ragged2e}
 
 \usepackage[USenglish]{babel}
-\usepackage[stretch = 25, shrink = 25]{microtype}
+% microtype `expansion=false`: icon fonts (fontawesome5) are not configured
+% for automatic font expansion. Leaving expansion enabled causes pdfTeX to
+% fail with "auto expansion is only possible with scalable fonts." Protrusion
+% (the other half of microtype) still works for body text.
+\usepackage[stretch = 25, shrink = 25, expansion=false]{microtype}
 
-\usepackage{fontawesome}
+% fontawesome5 instead of the legacy `fontawesome` package. fontawesome5 is
+% still shipped and maintained; the legacy `fontawesome` package is an older
+% separate package that uses bitmap fonts and is harder to find on some
+% distributions. Using fontawesome5 here matches the resume template.
+\usepackage{fontawesome5}
 
 \usepackage{fancyhdr}
 
@@ -42,7 +57,7 @@
     \faMobile{} 123-456-7890\\
     \faHome{} City, State\\
     \faEnvelope{} you@example.com\\
-    \faLinkedinSquare{} in/yourprofile
+    \faLinkedin{} in/yourprofile
 \end{minipage}
 
 {\color{cvteal} \rule{\linewidth}{1mm}}
