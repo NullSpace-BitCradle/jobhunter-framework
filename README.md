@@ -9,16 +9,20 @@ Discover relevant roles, tailor resumes with zero fabrication, and track applica
 - **Career Document Builder** — interactive interview that produces a structured Master Career Document (MCD), the single source of truth for your career history
 - **Job Discovery** — Python scanner that hits target company ATS platforms directly (Greenhouse, Lever, Ashby, SmartRecruiters, Workable), filters by keyword/location/anti-target rules derived from your MCD, and writes a ranked markdown digest of new roles
 - **Resume Writer** — generates ATS-optimized LaTeX resumes and cover letters tailored to each job description, with a hard zero-fabrication policy
-- **Orchestration** — Claude Code slash commands that chain the pieces into one smooth workflow (coming in Phase 2)
+- **Orchestration** — Claude Code slash commands that chain the pieces into one smooth workflow:
+  - `/discover` — run a scan and show the top new matches
+  - `/apply <url|company>` — end-to-end: fetch the JD, tailor resume + cover letter, log the application
+  - `/triage` — classify recruiter mail in the job-hunt inbox, update the tracker, schedule interviews
+- **Application tracker** — a plain-markdown `applications.md` file that records every application, status change, and interview
 
 ## Status
 
-Early, actively-developed framework. Phase 1 (scaffold + component integration) is in progress. Roadmap:
+Early, actively-developed framework. Roadmap:
 
 - [x] Phase 1 — scaffold + clean code/content separation
-- [ ] Phase 2 — unified config + `/apply` orchestration command + application tracker
-- [ ] Phase 3 — Gmail triage + Calendar integration for interviews
-- [ ] Phase 4 — tests, polish, public release
+- [x] Phase 2 — unified config + `config.yaml`-driven paths + user-data/code separation
+- [x] Phase 3 — `/discover`, `/apply`, `/triage` commands + `applications.md` tracker schema
+- [ ] Phase 4 — tests, agent config-driven paths (no-symlinks), polish, public release
 
 ## Prerequisites
 

@@ -1,10 +1,30 @@
 # jobhunter-framework — Claude Code Instructions
 
-This is a unified job-hunting framework with three integrated capabilities:
+This is a unified job-hunting framework with four integrated capabilities:
 
 1. **Career Document Builder** (`.claude/agents/career-doc-builder.md`) — interactive interview that produces a Master Career Document (MCD)
 2. **Job Discovery** (`discovery/main.py`) — Python CLI that scans target company ATS platforms and writes a ranked digest
 3. **Resume Writer** (`.claude/agents/ats-resume-writer.md`) — generates ATS-optimized LaTeX resumes and cover letters from an MCD plus a job description
+4. **Orchestration** (`.claude/commands/`) — slash commands that chain the other three together and handle application tracking + inbox triage
+
+## Framework config
+
+A user-local `config.yaml` at the repo root (gitignored) defines where personal data lives:
+
+- `mcd_path` — Master Career Document
+- `jd_dir` — where Job_Description-*.md files are saved
+- `output_dir` — where generated resumes and cover letters land
+- `applications_file` — the applications tracker
+- `discovery.config_dir`, `discovery.state_file`, `discovery.digest_dir` — discovery runtime paths
+- `gmail.enabled`, `gmail.account` — inbox triage (phase 3+)
+
+Every command and the discovery tool read this file at startup. `config.example.yaml` in the repo root is the tracked template; copy to `config.yaml` and customize.
+
+## Slash commands
+
+- **`/discover`** — run a discovery scan and show the top new matches. Wraps the Python scanner and summarizes the resulting digest. Use when the user asks to find new jobs, check for new postings, or run a scan.
+- **`/apply <url|company>`** — end-to-end pipeline for a single role: fetch the JD, invoke the resume writer, log the application. Use when the user asks to apply for a specific role or to "do the whole thing" for a URL or digest entry.
+- **`/triage`** — classify recent unread mail in the job-hunt inbox, update the applications tracker, and schedule interviews on the job-hunt calendar. Use when the user asks to check their job-search inbox, triage recruiter mail, or process interview invites.
 
 ## Workflow
 
@@ -50,6 +70,10 @@ Output is written to `discovery/output/digest-YYYY-MM-DD.md`. State (seen-job ID
 - **Never commit personal data.** Master Career Documents, job description files, application tracker, and generated resumes are gitignored by pattern. If you notice personal content being staged for commit, stop and flag it.
 - **Respect agent notes in the MCD.** Any content marked `> **Agent Note:**` is a binding instruction. Any content under a "Legacy & Historical Platforms" section is automatically excluded from all generated resumes.
 
-## Phase-aware behavior
+## Application tracker
 
-This framework is being built in phases. The current phase status is tracked in `README.md`. Orchestration slash commands (`/apply`, `/discover`, `/triage`) arrive in Phase 2; Gmail/Calendar integration arrives in Phase 3. Until then, each capability is invoked directly.
+`applications.template.md` in the repo root is the schema for the tracker file. On first use of `/apply`, if `applications_file` doesn't exist, copy this template into place and proceed.
+
+Tracker columns: Date Applied, Company, Role, Status, Last Update, Score, Files, URL, Notes. Status progresses through: `queued → applied → ack → screen → interview → offer | rejected | withdrew`.
+
+`/apply` appends rows on submission. `/triage` updates Status and Last Update when it sees relevant mail. Manual hand-edits are welcome — the format is plain markdown.

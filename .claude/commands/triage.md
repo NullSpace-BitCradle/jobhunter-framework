@@ -1,0 +1,103 @@
+---
+description: Triage the job-hunt inbox — classify mail, update tracker, schedule interviews
+---
+
+# /triage — Daily job-search inbox triage
+
+Classify recent unread mail in the job-hunt Gmail account, cross-reference against the applications tracker, and surface anything that needs the user's attention. Interviews with proposed times get scheduled on Google Calendar automatically; everything else is read-only classification.
+
+**Requires:** Gmail plugin and Google Calendar plugin configured for the job-hunt account specified in `config.yaml → gmail.account`.
+
+## Step 1 — Load config
+
+Read `config.yaml` at the framework repo root. Expand `~`. Need:
+
+- `gmail.enabled` — must be `true`, otherwise stop and tell the user to enable it
+- `gmail.account` — the job-hunt email address
+- `applications_file` — the tracker to update
+
+Read the tracker file now so you have its current state in memory for cross-referencing in Step 3.
+
+## Step 2 — Fetch recent unread mail
+
+Use `mcp__claude_ai_Gmail__gmail_search_messages` with:
+- Query: `is:unread newer_than:2d`
+- Limit: 25
+
+For each message in the result, read subject + sender + first ~500 chars of body via `mcp__claude_ai_Gmail__gmail_read_message`.
+
+## Step 3 — Classify each message
+
+Assign exactly one of these labels per message:
+
+| Label | Meaning |
+|---|---|
+| `recruiter_inbound` | Cold recruiter pitch for a role the user hasn't applied to |
+| `application_ack` | Automated "we received your application" from an ATS |
+| `screen_invite` | Request to schedule a recruiter / initial screen |
+| `interview_invite` | Request to schedule a hiring-manager or technical interview |
+| `rejection` | Explicit decline (polite no) |
+| `offer` | Offer letter or verbal offer |
+| `noise` | Newsletters, sales mail, unrelated |
+
+Match sender domain or any company name mentioned against companies already in `applications_file`. Tie the message to its tracker row when possible.
+
+**If classification confidence is below ~70%** for a message, do not act — surface it in the final report as "needs review".
+
+## Step 4 — Apply updates
+
+For each confidently-classified message tied to an existing tracker row:
+
+- **`application_ack`** → update Status to `ack`, set Last Update to today. Don't touch other fields.
+- **`screen_invite`** → update Status to `screen`, set Last Update. Add a Note with the proposed time if stated.
+- **`interview_invite`** → update Status to `interview`, set Last Update. If the message includes a proposed date/time, create a Calendar event (see below).
+- **`rejection`** → update Status to `rejected`, set Last Update, add the stated reason to Notes if present.
+- **`offer`** → **do not auto-update.** Flag loudly in the report. Let the user confirm and run `/apply` or a manual edit.
+
+**Calendar events for interview_invite:** use `mcp__claude_ai_Google_Calendar__gcal_create_event`. Event details:
+- Summary: `<Company> — <Role> interview (<type>)`
+- Description: link back to the applications tracker row + interviewer name if available
+- Start/end: from the mail body
+- Reminders: one 15-minute popup
+- Calendar: the job-hunt account (`primary` from its perspective)
+
+**For `recruiter_inbound`** → do **not** auto-apply. Extract the company name and the role and list it in the report for the user to decide.
+
+**For `noise`** → ignore.
+
+## Step 5 — Report
+
+Return a compact summary organized by action:
+
+```
+Triaged:   N messages in last 2 days
+
+Updates made:
+  - <Company> <Role>: <old-status> → <new-status>
+  - ...
+
+Interviews scheduled:
+  - <Company> <Role> — <date> <time> (<interview_type>)
+  - ...
+
+New recruiter inbounds (no action taken):
+  - <Company> — <Role>  (from <sender>)
+  - ...
+
+Rejections:
+  - <Company> <Role>
+  - ...
+
+⚠ Needs your attention:
+  - <message subject> — <reason>
+  - ...
+```
+
+Omit any section that is empty.
+
+## Hard constraints
+
+- **Read and classify only.** Never send, draft, delete, or archive messages from `/triage`. Drafts require explicit user instruction outside this command.
+- **Low confidence → surface, don't act.** If you're not sure what a message is, put it in "Needs your attention" rather than guessing.
+- **Preserve tracker history.** Status updates overwrite Status and Last Update columns only. Never modify Date Applied, Company, Role, Files, URL, or existing Notes — append to Notes only.
+- **Calendar events go on the job-hunt account only.** Do not touch the user's personal calendar.

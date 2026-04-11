@@ -38,3 +38,23 @@ applications.md
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code sandbox-injected files. The sandbox auto-creates several 0-byte
+# or character-device files at runtime that should never be tracked:
+#   - .claude/settings.json, settings.local.json, skills (character devices)
+#   - .gitmodules (ext4 mount point, not a real submodule file)
+#   - Node/Bun/npm scaffolding (empty package.json, lockfiles, rc files) that
+#     gets re-dropped into project dirs even after deletion
+.claude/settings.json
+.claude/settings.local.json
+.claude/skills
+/.gitmodules
+/discovery/.gitmodules
+/discovery/.npmrc
+/discovery/.yarnrc
+/discovery/.yarnrc.yml
+/discovery/bunfig.toml
+/discovery/package.json
+/discovery/package-lock.json
+/discovery/pnpm-lock.yaml
+/discovery/yarn.lock
