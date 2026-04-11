@@ -1,0 +1,40 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+
+# User-local config (examples remain tracked)
+/config.yaml
+/config.local.yaml
+/discovery/config/companies.yaml
+/discovery/config/keywords.yaml
+/discovery/config/filters.yaml
+
+# Discovery runtime data
+/discovery/state/
+/discovery/output/
+
+# Personal career content — never commit
+Master_Career_Document*.md
+Job_Description-*.md
+applications.md
+/output/
+*.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Keep the shipped LaTeX templates tracked
+!templates/*.tex
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,91 @@
+# THIS IS AN EXAMPLE. Copy this file to `keywords.yaml` and customize it for
+# your own job search. The example below is tuned for principal-tier security
+# and vulnerability-management roles; replace the domain keywords, scoring
+# bonuses, and exclusions with terms that match your field and seniority.
+#
+# Keyword matching rules. A job matches if:
+#   1. Title contains at least one `tier_keywords_in_title` entry
+#   2. Title contains at least one `domain_keywords_in_title` entry
+#   3. Title contains none of the `title_exclusions`
+#   4. If require_remote: true, location or remote flag must indicate remote
+
+match_rules:
+  tier_keywords_in_title:
+    - principal
+    - staff
+    - senior
+    - lead
+    - architect
+    - manager
+    - director
+    - head of
+
+  domain_keywords_in_title:
+    - security
+    - vulnerability
+    - threat
+    - detection
+    - incident
+    - grc
+    - compliance
+    - solutions engineer   # catches SE roles at security vendors
+    - sales engineer       # same
+    - field engineer       # same
+
+  title_exclusions:
+    - intern
+    - internship
+    - junior
+    - entry
+    - analyst i
+    - analyst 1
+    - analyst ii
+    - analyst 2
+    - tier 1
+    - tier 2
+    - tier-1
+    - tier-2
+    - soc analyst
+    - associate
+
+  require_remote: true
+
+  # Regex pattern matched (case-insensitive) against the location field after
+  # the remote check passes. Used to restrict matches to US-remote only and
+  # filter out international-remote roles the user can't apply to due to
+  # work-authorization constraints.
+  #
+  # This pattern matches any of:
+  #   - "united states"
+  #   - "usa"
+  #   - "u.s." / "u.s" / "u.s.a."
+  #   - "americas" (includes "remote, americas")
+  #   - "north america"
+  #   - bare "us" as a token (surrounded by start/end/whitespace/comma/dash)
+  #
+  # Leave this commented out to allow any remote role through.
+  required_location_regex: '\b(united states|usa|u\.?s\.?a?\.?|americas|north america)\b|(?:^|[,\s\-/])us(?=$|[,\s\-/])'
+
+# Scoring: higher score = higher priority in the digest
+scoring:
+  # Bonus for specific substrings in title
+  title_bonus:
+    principal: 10
+    staff: 8
+    architect: 6
+    "vulnerability management": 15
+    "security architect": 8
+    "solutions engineer": 5
+    "sales engineer": 4
+    "security consultant": 5
+    "cloud security": 4
+    "detection": 3
+    "threat": 3
+
+  # Bonus for company tier (from companies.yaml)
+  tier_bonus:
+    tier_1_saas: 10
+    tier_1_security_vendor: 15  # Highest — direct-hook opportunity at VM vendors
+    tier_1_consulting: 8
+    tier_2: 4
+    tier_3: 2

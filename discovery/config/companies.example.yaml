@@ -1,0 +1,327 @@
+# Target company registry for Job Discovery Agent.
+#
+# THIS IS AN EXAMPLE. Copy this file to `companies.yaml` and customize it for
+# your own job search. The example below is tuned for a principal-tier
+# security / infrastructure job search; replace the company list, tiers, and
+# ATS slugs with targets that match your field.
+#
+# Each entry needs: name, ats, slug
+#   ats: greenhouse | lever | ashby | smartrecruiters | workable
+#   slug: the identifier the ATS uses for this company's public board
+#
+# To verify a slug, open the company's careers page and click through to a
+# specific job. The URL will reveal the ATS and slug:
+#   boards.greenhouse.io/<slug>/...     → ats: greenhouse
+#   jobs.lever.co/<slug>/...            → ats: lever
+#   jobs.ashbyhq.com/<slug>/...         → ats: ashby
+#   jobs.smartrecruiters.com/<slug>/... → ats: smartrecruiters
+#   apply.workable.com/<slug>/...       → ats: workable
+#
+# Workday, iCIMS, and Google Careers are not currently supported. Companies
+# on those platforms live in the `manual_check` section at the bottom.
+#
+# Run `python main.py --verify` after editing to confirm all slugs return
+# results. Prune entries that return EMPTY/404.
+
+tier_1_saas:
+  - name: Datadog
+    ats: greenhouse
+    slug: datadog
+  - name: Cloudflare
+    ats: greenhouse
+    slug: cloudflare
+  - name: MongoDB
+    ats: greenhouse
+    slug: mongodb
+  - name: Databricks
+    ats: greenhouse
+    slug: databricks
+  - name: Elastic
+    ats: greenhouse
+    slug: elastic
+  - name: Confluent
+    ats: ashby
+    slug: confluent
+  - name: Plaid
+    ats: ashby
+    slug: plaid
+  - name: Snowflake
+    ats: ashby
+    slug: snowflake
+  - name: Twilio
+    ats: greenhouse
+    slug: twilio
+  - name: Gusto
+    ats: greenhouse
+    slug: gusto
+  - name: GitLab
+    ats: greenhouse
+    slug: gitlab
+  - name: Stripe
+    ats: greenhouse
+    slug: stripe
+  - name: Coinbase
+    ats: greenhouse
+    slug: coinbase
+  - name: Airbnb
+    ats: greenhouse
+    slug: airbnb
+  - name: Discord
+    ats: greenhouse
+    slug: discord
+  - name: Notion
+    ats: ashby
+    slug: notion
+  - name: Figma
+    ats: greenhouse
+    slug: figma
+  - name: Vercel
+    ats: greenhouse
+    slug: vercel
+  - name: Netlify
+    ats: greenhouse
+    slug: netlify
+  - name: Retool
+    ats: ashby
+    slug: retool
+  - name: PagerDuty
+    ats: greenhouse
+    slug: pagerduty
+  - name: Dropbox
+    ats: greenhouse
+    slug: dropbox
+  - name: Asana
+    ats: greenhouse
+    slug: asana
+  - name: Airtable
+    ats: greenhouse
+    slug: airtable
+  - name: Fivetran
+    ats: greenhouse
+    slug: fivetran
+  - name: dbt Labs
+    ats: greenhouse
+    slug: dbtlabsinc
+  - name: LaunchDarkly
+    ats: greenhouse
+    slug: launchdarkly
+  - name: Sentry
+    ats: ashby
+    slug: sentry
+  - name: Grafana Labs
+    ats: greenhouse
+    slug: grafanalabs
+  - name: Reddit
+    ats: greenhouse
+    slug: reddit
+  - name: Pinterest
+    ats: greenhouse
+    slug: pinterest
+  - name: Instacart
+    ats: greenhouse
+    slug: instacart
+  - name: DoorDash
+    ats: greenhouse
+    slug: doordashusa
+  - name: Robinhood
+    ats: greenhouse
+    slug: robinhood
+  - name: Brex
+    ats: greenhouse
+    slug: brex
+  - name: Ramp
+    ats: ashby
+    slug: ramp
+  - name: Mercury
+    ats: greenhouse
+    slug: mercury
+  - name: Linear
+    ats: ashby
+    slug: linear
+  - name: Anthropic
+    ats: greenhouse
+    slug: anthropic
+  - name: OpenAI
+    ats: ashby
+    slug: openai
+  - name: Scale AI
+    ats: greenhouse
+    slug: scaleai
+
+tier_1_security_vendor:
+  - name: Tenable
+    ats: greenhouse
+    slug: tenableinc
+  - name: Wiz
+    ats: greenhouse
+    slug: wizinc
+  - name: Chainguard
+    ats: greenhouse
+    slug: chainguard
+  - name: Orca Security
+    ats: greenhouse
+    slug: orcasecurity
+  - name: Abnormal Security
+    ats: greenhouse
+    slug: abnormalsecurity
+  - name: Expel
+    ats: greenhouse
+    slug: expel
+  - name: Huntress
+    ats: greenhouse
+    slug: huntress
+  - name: Axonius
+    ats: greenhouse
+    slug: axonius
+  - name: Dragos
+    ats: greenhouse
+    slug: dragos
+  - name: Censys
+    ats: greenhouse
+    slug: censys
+  - name: Bugcrowd
+    ats: greenhouse
+    slug: bugcrowd
+  - name: Socket
+    ats: greenhouse
+    slug: socket
+  - name: Material Security
+    ats: ashby
+    slug: materialsecurity
+  - name: Corelight
+    ats: greenhouse
+    slug: corelight
+  - name: ThreatLocker
+    ats: greenhouse
+    slug: threatlocker
+  - name: HackerOne
+    ats: ashby
+    slug: hackerone
+  - name: Semgrep
+    ats: ashby
+    slug: semgrep
+
+tier_1_consulting:
+  - name: Bishop Fox
+    ats: greenhouse
+    slug: bishopfox
+  - name: Praetorian
+    ats: greenhouse
+    slug: praetorian
+
+# Companies whose ATS is not currently supported, or where we couldn't find
+# the correct slug on a supported platform. Monitor these manually by visiting
+# their careers URLs directly.
+manual_check:
+  # Workday-based (not yet supported)
+  - name: HashiCorp (IBM)
+    careers_url: https://www.hashicorp.com/en/careers/open-positions
+    note: "Likely Workday post-IBM acquisition; Greenhouse board retired"
+  - name: Rippling
+    careers_url: https://www.rippling.com/careers
+    note: "Workday — not yet supported"
+  - name: Rapid7
+    careers_url: https://www.rapid7.com/careers/open-positions/
+    note: "Workday (careers.rapid7.com is CloudFront-proxied) — not yet supported"
+  - name: Snyk
+    careers_url: https://snyk.io/careers/
+    note: "Unknown ATS — not on any currently-supported public API"
+  - name: Lacework (Fortinet)
+    careers_url: https://www.lacework.com/company/careers
+    note: "Workday post-Fortinet acquisition — not yet supported"
+  - name: Okta / Auth0
+    careers_url: https://www.okta.com/company/careers/
+    note: "Workday — not yet supported"
+  - name: CrowdStrike
+    careers_url: https://www.crowdstrike.com/careers/
+    note: "Workday — not yet supported"
+  - name: Palo Alto Networks
+    careers_url: https://www.paloaltonetworks.com/company/careers
+    note: "Workday — not yet supported"
+  - name: Qualys
+    careers_url: https://www.qualys.com/company/careers/
+    note: "Workday — not yet supported"
+  - name: SentinelOne
+    careers_url: https://www.sentinelone.com/careers/
+    note: "Workday — not yet supported"
+  - name: Zscaler
+    careers_url: https://www.zscaler.com/company/careers
+    note: "Workday — not yet supported"
+  - name: Netskope
+    careers_url: https://www.netskope.com/company/careers
+    note: "Workday — not yet supported"
+  - name: NCC Group
+    careers_url: https://www.nccgroup.com/us/careers/
+    note: "Workday — not yet supported"
+  - name: Optiv
+    careers_url: https://www.optiv.com/careers
+    note: "iCIMS — not yet supported"
+  - name: GuidePoint Security
+    careers_url: https://www.guidepointsecurity.com/careers/
+    note: "Unknown ATS — check manually"
+  - name: Mandiant (Google Cloud Security Consulting)
+    careers_url: https://careers.google.com/jobs/results/?company=Google&company=Mandiant
+    note: "Google Careers — not yet supported"
+  # Security vendors where slug could not be verified on Greenhouse/Ashby/Lever
+  - name: 1Password
+    careers_url: https://1password.com/careers
+    note: "Slug not found on public ATS APIs — check manually"
+  - name: Red Canary
+    careers_url: https://redcanary.com/company/careers/
+    note: "Slug not found — check manually"
+  - name: Sysdig
+    careers_url: https://sysdig.com/careers/
+    note: "Slug not found — check manually"
+  - name: Aqua Security
+    careers_url: https://www.aquasec.com/careers/
+    note: "Slug not found — check manually"
+  - name: Armis
+    careers_url: https://www.armis.com/careers/
+    note: "Slug not found — check manually"
+  - name: GreyNoise
+    careers_url: https://www.greynoise.io/careers
+    note: "Slug not found — check manually"
+  - name: Cobalt.io
+    careers_url: https://cobalt.io/careers
+    note: "Slug not found — check manually"
+  - name: Endor Labs
+    careers_url: https://www.endorlabs.com/careers
+    note: "Slug not found — check manually"
+  - name: Pentera
+    careers_url: https://pentera.io/careers/
+    note: "Slug not found — check manually"
+  - name: Horizon3.ai
+    careers_url: https://horizon3.ai/careers/
+    note: "Slug not found — check manually"
+  - name: Illumio
+    careers_url: https://www.illumio.com/company/careers
+    note: "Slug not found — check manually"
+  - name: Vectra AI
+    careers_url: https://www.vectra.ai/about/careers
+    note: "Slug not found — check manually"
+  - name: ExtraHop
+    careers_url: https://www.extrahop.com/company/careers/
+    note: "Slug not found — check manually"
+  # Consulting boutiques where slug could not be verified
+  - name: Trail of Bits
+    careers_url: https://www.trailofbits.com/careers
+    note: "Slug not found — check manually"
+  - name: Doyensec
+    careers_url: https://www.doyensec.com/careers.html
+    note: "Slug not found — check manually"
+  - name: IOActive
+    careers_url: https://ioactive.com/careers/
+    note: "Slug not found — check manually"
+  - name: Include Security
+    careers_url: https://www.includesecurity.com/careers/
+    note: "Slug not found — check manually"
+  - name: Leviathan Security
+    careers_url: https://www.leviathansecurity.com/careers/
+    note: "Slug not found — check manually"
+  # Other companies to monitor manually
+  - name: JupiterOne
+    careers_url: https://www.jupiterone.com/company/careers
+    note: "Workable (widget returns only catch-all; no real active listings to scrape)"
+  - name: Vulcan Cyber
+    careers_url: https://vulcancyber.com/careers
+    note: "Unknown ATS — check manually"

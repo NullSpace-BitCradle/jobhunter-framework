@@ -1,0 +1,79 @@
+# THIS IS AN EXAMPLE. Copy this file to `filters.yaml` and customize it.
+#
+# Anti-target patterns derived from the Anti-Target Lanes section of your
+# Master Career Document. Jobs matching these patterns are moved to the
+# "Skipped" section of the digest rather than surfaced as matches. The example
+# patterns below are drawn from a security/infrastructure job search — replace
+# them with the anti-targets specific to your own profile.
+#
+# Each pattern has required conditions. All specified conditions must match for the
+# job to be classified as anti-target. Start conservative; tighten as real patterns
+# emerge from first runs.
+
+anti_target_patterns:
+
+  # 1. Hands-on Application Security Engineer
+  #    Title indicates AppSec AND description references multiple SAST/DAST/WAF tools
+  hands_on_appsec:
+    description: "Hands-on Application Security Engineer role (MCD anti-target)"
+    title_contains_any:
+      - application security engineer
+      - appsec engineer
+      - product security engineer
+    description_contains_any:
+      - sast
+      - dast
+      - waf
+      - owasp top 10
+      - secure code review
+      - burp suite
+      - snyk code
+
+  # 2. Active certification hard-required
+  cert_hard_required:
+    description: "Active certification required as hard requirement (MCD anti-target)"
+    description_contains_any:
+      - "cissp is required"
+      - "cissp required"
+      - "must have cissp"
+      - "active cissp"
+      - "ccsp required"
+      - "must have ccsp"
+      - "cism required"
+      - "must have cism"
+
+  # 3. Bachelor's degree hard-required
+  #    Only blocks explicit "required" language; preferred/equivalent language is allowed.
+  degree_hard_required:
+    description: "Bachelor's degree hard-required (MCD anti-target)"
+    description_contains_any:
+      - "bachelor's degree is required"
+      - "bachelor's degree required"
+      - "bachelor degree required"
+      - "must have a bachelor's"
+      - "bachelor's in computer science required"
+
+  # 4. On-site required
+  #    Jobs tagged on-site or hybrid-required. Negates if "remote" also appears.
+  onsite_required:
+    description: "On-site or hybrid-required role (MCD anti-target)"
+    location_contains_any:
+      - "on-site"
+      - "onsite"
+      - "in-office"
+    negates_if_location_also_contains:
+      - "remote"
+
+  # 5. Analyst-tier roles (underleveled)
+  analyst_tier:
+    description: "Analyst-tier / junior role (underleveled for MCD profile)"
+    title_contains_any:
+      - "analyst i"
+      - "analyst 1"
+      - "analyst ii"
+      - "analyst 2"
+      - "tier 1 "
+      - "tier 2 "
+      - "soc analyst"
+      - "junior security"
+      - "entry level"
