@@ -81,9 +81,7 @@ tier_1_saas:
   - name: Netlify
     ats: greenhouse
     slug: netlify
-  - name: Retool
-    ats: ashby
-    slug: retool
+  # Retool — no public ATS board found as of 2026-04-12; moved to manual_check
   - name: PagerDuty
     ats: greenhouse
     slug: pagerduty

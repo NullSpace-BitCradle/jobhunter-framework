@@ -45,9 +45,10 @@ Thumbs.db
 #   - .gitmodules (ext4 mount point, not a real submodule file)
 #   - Node/Bun/npm scaffolding (empty package.json, lockfiles, rc files) that
 #     gets re-dropped into project dirs even after deletion
-.claude/settings.json
-.claude/settings.local.json
+**/settings.json
+**/settings.local.json
 .claude/skills
+discovery/.claude/
 /.gitmodules
 /discovery/.gitmodules
 /discovery/.npmrc
