@@ -2,7 +2,7 @@
 import html
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
@@ -65,7 +65,7 @@ class LeverScraper(Scraper):
             posted_at: Optional[datetime] = None
             if isinstance(created_at_ms, (int, float)):
                 try:
-                    posted_at = datetime.utcfromtimestamp(created_at_ms / 1000.0)
+                    posted_at = datetime.fromtimestamp(created_at_ms / 1000.0, tz=timezone.utc)
                 except (OverflowError, OSError, ValueError):
                     posted_at = None
             description = j.get("descriptionPlain") or _strip_html(j.get("description") or "")
