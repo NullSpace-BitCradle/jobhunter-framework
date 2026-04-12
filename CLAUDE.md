@@ -25,6 +25,7 @@ Every command and the discovery tool read this file at startup. `config.example.
 - **`/discover`** — run a discovery scan and show the top new matches. Wraps the Python scanner and summarizes the resulting digest. Use when the user asks to find new jobs, check for new postings, or run a scan.
 - **`/apply <url|company>`** — end-to-end pipeline for a single role: fetch the JD, invoke the resume writer, log the application. Use when the user asks to apply for a specific role or to "do the whole thing" for a URL or digest entry.
 - **`/triage`** — classify recent unread mail in the job-hunt inbox, update the applications tracker, and schedule interviews on the job-hunt calendar. Use when the user asks to check their job-search inbox, triage recruiter mail, or process interview invites.
+- **`/sync-filters`** — regenerate the discovery anti-target filters from the MCD's Anti-Target Lanes section. Use when the user has updated their MCD's anti-targets, or to check for drift between the MCD and the discovery filter config.
 
 ## Workflow
 
