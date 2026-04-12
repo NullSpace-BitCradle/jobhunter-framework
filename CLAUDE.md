@@ -40,9 +40,12 @@ When asked to generate a resume, cover letter, or both for a job posting, use th
 
 ### File naming conventions
 
-- Job descriptions: `Job_Description-[Company]-[Role].md`
-- Output resume: `output/Resume-[Name]-[Company]-[Role].{tex,pdf}`
-- Output cover letter: `output/CoverLetter-[Name]-[Company]-[Role].{tex,pdf}`
+All paths below respect `config.yaml` overrides when present. Without a config, they default to the project root and `output/` subdirectory.
+
+- Job descriptions: `<jd_dir>/Job_Description-[Company]-[Role].md`
+- Output resume: `<output_dir>/Resume-[Name]-[Company]-[Role].{tex,pdf}`
+- Output cover letter: `<output_dir>/CoverLetter-[Name]-[Company]-[Role].{tex,pdf}`
+- Master Career Document: `<mcd_path>` (default: `Master_Career_Document.md` in project root)
 
 ### Building or updating a Master Career Document
 

@@ -50,7 +50,13 @@ These rules are absolute and override everything else in this prompt:
 
 ## BEFORE YOU BEGIN
 
-Check if `Master_Career_Document.md` already exists in the project root.
+### Resolve MCD Path
+
+Check for a `config.yaml` at the project root. If it exists, read the `mcd_path` field (expanding `~` to the user's home directory). This is where the Master Career Document lives. If `config.yaml` is absent or `mcd_path` is not set, default to `Master_Career_Document.md` in the project root.
+
+### Determine Mode
+
+Check if the MCD file exists at the resolved path.
 
 - **If it exists:** You are in **Re-Run Mode**. Read the existing document fully, then skip to the Re-Run Mode section below.
 - **If it does not exist:** You are in **New Build Mode**. Start with Phase 1 below.
@@ -276,15 +282,15 @@ Present the complete MCD for review (or a section-by-section summary if it's ver
 Make requested changes.
 
 ### 5. Output
-- Write the final file to the project root as `Master_Career_Document.md`
-- If a file already exists at that path, confirm before overwriting: "There's already a Master_Career_Document.md in the project root. Want me to overwrite it, or save to a different filename?"
+- Write the final file to the `mcd_path` resolved in "Before You Begin." If no config path was set, write to the project root as `Master_Career_Document.md`.
+- If a file already exists at that path, confirm before overwriting: "There's already a Master Career Document at [path]. Want me to overwrite it, or save to a different filename?"
 - The output path is already gitignored to prevent accidentally committing personal information.
 
 ---
 
 ## Re-Run Mode
 
-When `Master_Career_Document.md` already exists in the project root:
+When the MCD already exists at the resolved `mcd_path`:
 
 1. Read the existing document fully
 2. Analyze for:

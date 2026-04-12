@@ -54,11 +54,23 @@ These rules are absolute and override everything else in this prompt:
 
 ---
 
+## Step 0: Resolve Paths
+
+Before reading source files, check for a `config.yaml` at the project root. If it exists, read it and expand `~` to the user's home directory in all paths. Use these fields:
+
+- **`mcd_path`** — where to find the Master Career Document (default if absent: `Master_Career_Document.md` in the project root)
+- **`jd_dir`** — directory containing Job Description files (default: the project root)
+- **`output_dir`** — where to write generated `.tex` and compiled `.pdf` files (default: `output/` in the project root)
+
+If `config.yaml` is absent, use the defaults. If it exists but a field is missing, use the default for that field. Store the resolved paths for use throughout this workflow.
+
+---
+
 ## Step 1: Read Source Files
 
 Before writing anything, read these files in order:
 
-1. The user's Master Career Document (in the project root, named `Master_Career_Document.md`) -- single source of truth for all content. The MCD may use either the simple format (from `examples/`) or the comprehensive 18-section format (produced by the `career-doc-builder` agent). Both are valid. Key section name mappings:
+1. The user's Master Career Document — the single source of truth for all content. Read from the `mcd_path` resolved in Step 0. The MCD may use either the simple format (from `examples/`) or the comprehensive 18-section format (produced by the `career-doc-builder` agent). Both are valid. Key section name mappings:
    - "Professional Summary" or "Professional Summaries" -- use the most relevant summary version for the target role
    - "Skills" or "Core Competencies & Technical Skills" -- same content, different heading
    - "Professional Experience" or "Work Experience" -- same content, different heading
@@ -66,7 +78,7 @@ Before writing anything, read these files in order:
    - "Notes for Resume Customization" -- strategic guidance for content selection and positioning. **Always read this section in full before proceeding -- it contains the Positioning Options, Default Lane marker, Anti-Target Lanes list, and Target Companies by Lane references that drive Step 1.5 decisions.**
    - "Hybrid Strengths" (or similar) -- section name varies by domain (e.g., "Hybrid Engineering & Leadership Strengths"); contains cross-domain positioning themes. **Look for bullets flagged with "CROWN JEWEL" or agent notes identifying crown-jewel achievements — these must be surfaced in resume summaries for applicable role types.**
    - "Legacy & Historical Platforms" -- always skip, regardless of format
-2. The job description file (in the project root, named `Job_Description-[Company]-[Role].md`)
+2. The job description file — look for `Job_Description-[Company]-[Role].md` in the `jd_dir` resolved in Step 0
 3. `templates/resume-template.tex` -- to understand the available LaTeX commands
 4. `templates/cover-letter-template.tex` -- if a cover letter is also requested
 
@@ -286,7 +298,7 @@ Category Name  & Skill1, Skill2 \\
 
 ### Output Naming
 
-Save as: `output/Resume-[YourName]-[Company]-[Role].tex`
+Save as: `<output_dir>/Resume-[YourName]-[Company]-[Role].tex` (where `output_dir` is from Step 0)
 
 ---
 
@@ -305,7 +317,7 @@ If a cover letter is requested, produce a complete `.tex` file using the cover l
 
 ### Output Naming
 
-Save as: `output/CoverLetter-[YourName]-[Company]-[Role].tex`
+Save as: `<output_dir>/CoverLetter-[YourName]-[Company]-[Role].tex` (where `output_dir` is from Step 0)
 
 ---
 
@@ -327,16 +339,16 @@ After writing each `.tex` file (resume and cover letter if applicable), compile 
 
 Use the actual filename from the output naming convention in Step 4 or Step 5 -- not the placeholder shown below.
 
-1. **Compile:** Run `pdflatex` twice (for cross-references) in a single command:
+1. **Compile:** Run `pdflatex` twice (for cross-references) in a single command. Use the `output_dir` from Step 0:
    ```bash
-   cd output && pdflatex Resume-Name-Company-Role.tex && pdflatex Resume-Name-Company-Role.tex
+   cd <output_dir> && pdflatex Resume-Name-Company-Role.tex && pdflatex Resume-Name-Company-Role.tex
    ```
 2. **Check for success:** Verify the `.pdf` file exists and has non-zero size. If it does, compilation succeeded -- proceed to cleanup. **Do not debug or search for packages if the PDF was generated successfully.**
-3. **Clean up:** Remove all auxiliary files using explicit paths:
+3. **Clean up:** Remove all auxiliary files from the output directory:
    ```bash
-   rm -f output/*.aux output/*.log output/*.out output/*.toc output/*.fls output/*.fdb_latexmk
+   rm -f <output_dir>/*.aux <output_dir>/*.log <output_dir>/*.out <output_dir>/*.toc <output_dir>/*.fls <output_dir>/*.fdb_latexmk
    ```
-4. **Verify final state:** Run `ls output/` and confirm only `.tex` and `.pdf` files remain.
+4. **Verify final state:** Run `ls <output_dir>/` and confirm only `.tex` and `.pdf` files remain.
 
 **If compilation fails:** Check the `.log` file for the actual error. Common issues:
 - Missing package: install with `tlmgr install <package>` or `sudo apt-get install texlive-<collection>`
