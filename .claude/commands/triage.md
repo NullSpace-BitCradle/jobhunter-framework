@@ -1,32 +1,47 @@
 ---
-description: Triage the job-hunt inbox — classify mail, update tracker, schedule interviews
+description: Triage the job-hunt inbox - classify mail, update tracker, schedule interviews
 ---
 
-# /triage — Daily job-search inbox triage
+# /triage - Daily job-search inbox triage
 
-Classify recent unread mail in the job-hunt Gmail account, cross-reference against the applications tracker, and surface anything that needs the user's attention. Interviews with proposed times get scheduled on Google Calendar automatically; everything else is read-only classification.
+Classify recent mail in the job-hunt Gmail account, cross-reference against the applications tracker, and surface anything that needs the user's attention. Interviews with proposed times get scheduled on Google Calendar automatically; everything else is read-only classification.
+
+Previewing an email in Gmail shouldn't cause /triage to miss it, so the query does not filter on read/unread - tracker-state dedup handles repeat runs.
 
 **Requires:** Gmail plugin and Google Calendar plugin configured for the job-hunt account specified in `config.yaml → gmail.account`.
 
-## Step 1 — Load config
+## Step 0 - Verify MCP tools available
+
+Before proceeding, confirm these MCP tools are accessible:
+- `mcp__claude_ai_Gmail__gmail_search_messages`
+- `mcp__claude_ai_Gmail__gmail_read_message`
+- `mcp__claude_ai_Google_Calendar__gcal_create_event` (only if scheduling is needed)
+
+If the Gmail tools are not available, stop immediately and tell the user: "Gmail MCP server not connected. Enable it in your Claude Code MCP configuration before running /triage."
+
+## Step 1 - Load config
 
 Read `config.yaml` at the framework repo root. Expand `~`. Need:
 
-- `gmail.enabled` — must be `true`, otherwise stop and tell the user to enable it
-- `gmail.account` — the job-hunt email address
-- `applications_file` — the tracker to update
+- `gmail.enabled` - must be `true`, otherwise stop and tell the user to enable it
+- `gmail.account` - the job-hunt email address
+- `applications_file` - the tracker to update
 
 Read the tracker file now so you have its current state in memory for cross-referencing in Step 3.
 
-## Step 2 — Fetch recent unread mail
+## Step 2 - Fetch recent mail
 
 Use `mcp__claude_ai_Gmail__gmail_search_messages` with:
-- Query: `is:unread newer_than:2d`
+- Query: `newer_than:2d -category:promotions -category:social`
 - Limit: 25
 
 For each message in the result, read subject + sender + first ~500 chars of body via `mcp__claude_ai_Gmail__gmail_read_message`.
 
-## Step 3 — Classify each message
+**Dedup against the tracker before acting in Step 4.** For each classified message tied to a tracker row, check whether the Status column already reflects the same or downstream state - e.g., if a message classifies as `application_ack` but the row is already `ack`/`screen`/`interview`/`offer`/`rejected`, skip the update. Status transitions should only move forward along: `queued → applied → ack → screen → interview → offer | rejected | withdrew`. Never regress a status.
+
+A `queued` row receiving an `application_ack`, `screen_invite`, `interview_invite`, or `rejection` is valid - the downstream event implicitly confirms submission, so fast-forward the status directly (e.g., `queued → ack`) instead of going through `applied`.
+
+## Step 3 - Classify each message
 
 Assign exactly one of these labels per message:
 
@@ -42,9 +57,9 @@ Assign exactly one of these labels per message:
 
 Match sender domain or any company name mentioned against companies already in `applications_file`. Tie the message to its tracker row when possible.
 
-**If classification confidence is below ~70%** for a message, do not act — surface it in the final report as "needs review".
+**If classification confidence is below ~70%** for a message, do not act - surface it in the final report as "needs review".
 
-## Step 4 — Apply updates
+## Step 4 - Apply updates
 
 For each confidently-classified message tied to an existing tracker row:
 
@@ -55,7 +70,7 @@ For each confidently-classified message tied to an existing tracker row:
 - **`offer`** → **do not auto-update.** Flag loudly in the report. Let the user confirm and run `/apply` or a manual edit.
 
 **Calendar events for interview_invite:** use `mcp__claude_ai_Google_Calendar__gcal_create_event`. Event details:
-- Summary: `<Company> — <Role> interview (<type>)`
+- Summary: `<Company> - <Role> interview (<type>)`
 - Description: link back to the applications tracker row + interviewer name if available
 - Start/end: from the mail body
 - Reminders: one 15-minute popup
@@ -65,32 +80,32 @@ For each confidently-classified message tied to an existing tracker row:
 
 **For `noise`** → ignore.
 
-## Step 5 — Report
+## Step 5 - Report
 
 Return a compact summary organized by action:
 
 ```
-Triaged:   N messages in last 2 days
+Triaged: N messages in last 2 days
 
 Updates made:
-  - <Company> <Role>: <old-status> → <new-status>
-  - ...
+ - <Company> <Role>: <old-status> → <new-status>
+ - ...
 
 Interviews scheduled:
-  - <Company> <Role> — <date> <time> (<interview_type>)
-  - ...
+ - <Company> <Role> - <date> <time> (<interview_type>)
+ - ...
 
 New recruiter inbounds (no action taken):
-  - <Company> — <Role>  (from <sender>)
-  - ...
+ - <Company> - <Role> (from <sender>)
+ - ...
 
 Rejections:
-  - <Company> <Role>
-  - ...
+ - <Company> <Role>
+ - ...
 
 ⚠ Needs your attention:
-  - <message subject> — <reason>
-  - ...
+ - <message subject> - <reason>
+ - ...
 ```
 
 Omit any section that is empty.
@@ -99,5 +114,5 @@ Omit any section that is empty.
 
 - **Read and classify only.** Never send, draft, delete, or archive messages from `/triage`. Drafts require explicit user instruction outside this command.
 - **Low confidence → surface, don't act.** If you're not sure what a message is, put it in "Needs your attention" rather than guessing.
-- **Preserve tracker history.** Status updates overwrite Status and Last Update columns only. Never modify Date Applied, Company, Role, Files, URL, or existing Notes — append to Notes only.
+- **Preserve tracker history.** Status updates overwrite Status and Last Update columns only. Never modify Date Applied, Company, Role, Files, URL, or existing Notes - append to Notes only.
 - **Calendar events go on the job-hunt account only.** Do not touch the user's personal calendar.
