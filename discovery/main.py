@@ -90,6 +90,13 @@ _TRACKER_DATE_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}\b")
 
 _TRACKER_TERMINAL_STATUSES = {"withdrawn", "rejected", "declined_anti_target"}
 
+# Valid tracker statuses for reference and filtering. Ordered by state-machine
+# position (first = earliest, last = terminal).
+_TRACKER_ALL_STATUSES = {
+    "queued", "applied", "ack", "screen", "interview", "offer",
+    "rejected", "withdrawn", "declined_anti_target",
+}
+
 
 def _parse_tracker_header(lines: list[str]) -> dict[str, int] | None:
     """Find the markdown table header and return {column_name: index}.
@@ -110,20 +117,22 @@ def _parse_tracker_header(lines: list[str]) -> dict[str, int] | None:
     return None
 
 
-def load_declined_urls(applications_file: Path | None) -> set[str]:
-    """Parse the applications tracker and return URLs of rows with terminal status.
+def load_tracker_urls(
+    applications_file: Path | None,
+    statuses: set[str] | None = None,
+) -> set[str]:
+    """Return normalized URLs from the applications tracker.
 
-    The state file (seen-jobs.json) gets cleared periodically. The applications
-    tracker is the durable record of roles Joshua has already reviewed and
-    rejected - we use it as a persistent skip list so withdrawn/rejected roles
-    don't re-surface in discovery digests.
+    If statuses is None, returns URLs from rows in ANY status. If statuses is
+    a set, returns only URLs in rows whose status matches. Always normalizes
+    URLs so tracking-param drift doesn't defeat equality checks.
 
-    Uses header-based column lookup so tracker schema changes (adding a Salary
-    column, reordering, etc.) don't silently break the parser.
+    Uses header-based column lookup so tracker schema changes don't silently
+    break the parser.
     """
     if not applications_file or not applications_file.exists():
         return set()
-    declined: set[str] = set()
+    urls: set[str] = set()
     try:
         lines = applications_file.read_text().splitlines()
         header = _parse_tracker_header(lines)
@@ -142,19 +151,82 @@ def load_declined_urls(applications_file: Path | None) -> set[str]:
             if len(cells) <= max(status_idx, url_idx):
                 continue
             status = cells[status_idx].lower()
+            if statuses is not None and status not in statuses:
+                continue
             url = cells[url_idx]
             # Strip markdown auto-link wrappers (<url>) and link syntax ([text](url))
             url = url.strip().strip("<>")
             if url.startswith("[") and "](" in url and url.endswith(")"):
                 url = url.split("](", 1)[1].rstrip(")")
-            # Normalize for comparison - tracking params and fragments vary
-            # between sessions and must not defeat the skip-list match.
             normalized = normalize_url(url)
-            if status in _TRACKER_TERMINAL_STATUSES and normalized:
-                declined.add(normalized)
+            if normalized:
+                urls.add(normalized)
     except Exception as e:
         logging.warning("Could not parse applications tracker %s: %s", applications_file, e)
-    return declined
+    return urls
+
+
+def load_declined_urls(applications_file: Path | None) -> set[str]:
+    """URLs of rows with terminal status (skip-list for discovery).
+
+    Thin wrapper over load_tracker_urls. The state file (seen-jobs.json) gets
+    pruned periodically, but the applications tracker is a durable record;
+    terminal rows (rejected/withdrew/declined_anti_target) should never
+    re-surface in discovery.
+    """
+    return load_tracker_urls(applications_file, statuses=_TRACKER_TERMINAL_STATUSES)
+
+
+def load_tracker_identity_keys(
+    applications_file: Path | None,
+    statuses: set[str] | None = None,
+) -> tuple[set[str], set[tuple[str, str]]]:
+    """Return (normalized_url_set, (normalized_company, lowercased_title) set) from tracker.
+
+    Backfill needs a secondary match key because historical digests (pre URL
+    canonicalization) record the LinkedIn URL while the tracker may hold the
+    ATS URL for the same posting. Pure URL matching misses these; adding
+    (company, title) catches them.
+    """
+    if not applications_file or not applications_file.exists():
+        return set(), set()
+    urls: set[str] = set()
+    pairs: set[tuple[str, str]] = set()
+    try:
+        lines = applications_file.read_text().splitlines()
+        header = _parse_tracker_header(lines)
+        if not header:
+            return set(), set()
+        status_idx = header.get("status")
+        url_idx = header.get("url")
+        company_idx = header.get("company")
+        role_idx = header.get("role")
+        if any(i is None for i in (status_idx, url_idx, company_idx, role_idx)):
+            return set(), set()
+        for line in lines:
+            if not _TRACKER_DATE_ROW.match(line):
+                continue
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) <= max(status_idx, url_idx, company_idx, role_idx):
+                continue
+            status = cells[status_idx].lower()
+            if statuses is not None and status not in statuses:
+                continue
+            # URL
+            url = cells[url_idx].strip().strip("<>")
+            if url.startswith("[") and "](" in url and url.endswith(")"):
+                url = url.split("](", 1)[1].rstrip(")")
+            normalized = normalize_url(url)
+            if normalized:
+                urls.add(normalized)
+            # Company + Role pair
+            company = cells[company_idx]
+            role = cells[role_idx]
+            if company and role:
+                pairs.add((normalize_company(company), role.lower().strip()))
+    except Exception as e:
+        logging.warning("Could not parse applications tracker %s: %s", applications_file, e)
+    return urls, pairs
 
 
 def load_state(state_file: Path) -> dict:
@@ -839,12 +911,296 @@ def run_ingest(
     return 0
 
 
+def parse_digest_matches(path: Path, digest_date: date) -> list[dict]:
+    """Extract matched jobs from a `digest-YYYY-MM-DD.md` file.
+
+    Returns list of dicts with keys: company, title, score, url, location,
+    posted_at (date or None), tier, digest_date, source ('ats' or 'board').
+    Jobs in the 'Skipped (Anti-Target Lanes)' and 'Candidate companies'
+    sections are NOT captured - only actual matches from tier sections.
+    """
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return []
+
+    results: list[dict] = []
+    current_tier: str | None = None
+    current_job: dict | None = None
+
+    def finalize(job: dict | None) -> None:
+        if job and job.get("url") and job.get("score") is not None:
+            results.append(job)
+
+    for line in lines:
+        h2 = re.match(r"^##\s+(.+?)\s*$", line)
+        if h2:
+            finalize(current_job)
+            current_job = None
+            name = h2.group(1)
+            # Only tier sections or board_match contain actual matches
+            if name.startswith("tier_") or name == "board_match":
+                current_tier = name
+            else:
+                current_tier = None
+            continue
+
+        if not current_tier:
+            continue
+
+        h3 = re.match(r"^###\s+(.+?)(\s+_\(via board\)_)?\s*$", line)
+        if h3:
+            finalize(current_job)
+            header = h3.group(1).strip()
+            source_tag = "board" if h3.group(2) else "ats"
+            # Split on first " - ", " — ", or " – " (covers historical digests
+            # from before the dash cleanup that used em/en-dash separators).
+            parts = re.split(r"\s+[-\u2014\u2013]\s+", header, maxsplit=1)
+            if len(parts) == 2:
+                company, title = parts[0].strip(), parts[1].strip()
+            else:
+                company, title = "", header
+            current_job = {
+                "company": company, "title": title,
+                "score": None, "url": "", "location": "",
+                "posted_at": None, "tier": current_tier,
+                "digest_date": digest_date, "source": source_tag,
+            }
+            continue
+
+        if current_job is None:
+            continue
+
+        m = re.match(r"^- \*\*Score:\*\*\s+(-?\d+)", line)
+        if m:
+            current_job["score"] = int(m.group(1))
+            continue
+        m = re.match(r"^- \*\*Location:\*\*\s+(.+)$", line)
+        if m:
+            current_job["location"] = m.group(1).strip()
+            continue
+        m = re.match(r"^- \*\*Posted:\*\*\s+(\d{4}-\d{2}-\d{2})$", line)
+        if m:
+            try:
+                current_job["posted_at"] = datetime.fromisoformat(m.group(1)).date()
+            except ValueError:
+                pass
+            continue
+        m = re.match(r"^- \*\*Apply:\*\*\s+(.+)$", line)
+        if m:
+            current_job["url"] = m.group(1).strip().strip("<>")
+            continue
+
+    finalize(current_job)
+    return results
+
+
+def write_backfill_digest(
+    candidates: list[dict],
+    total_missed: int,
+    digests_scanned: int,
+    days: int,
+    limit: int,
+    min_score: int | None,
+    max_score: int | None,
+    digest_dir: Path,
+) -> Path:
+    """Render the backfill digest with aggregated sighting info per posting."""
+    now = datetime.now(timezone.utc)
+    today_str = now.date().isoformat()
+    stamp = now.strftime("%H%M%S")
+    digest_dir.mkdir(parents=True, exist_ok=True)
+    out_path = digest_dir / f"backfill-{today_str}-{stamp}.md"
+
+    lines: list[str] = []
+    lines.append(f"# Backfill Digest - {today_str} {stamp[:2]}:{stamp[2:4]}:{stamp[4:6]}")
+    lines.append("")
+    window = f"last {days} day(s)" if days > 0 else "all time"
+    lines.append(f"- **Digests scanned:** {digests_scanned} ({window})")
+    lines.append(f"- **Missed opportunities total:** {total_missed}")
+    lines.append(f"- **Shown below:** {len(candidates)} (limit {limit})")
+    if min_score is not None:
+        lines.append(f"- **Score floor:** {min_score}")
+    if max_score is not None:
+        lines.append(f"- **Score ceiling:** {max_score}")
+    lines.append("")
+    lines.append(
+        "Matched jobs surfaced in prior digests that were never logged to the "
+        "applications tracker. Sorted by highest-ever score, with last-seen date as tiebreaker."
+    )
+    lines.append("")
+
+    if not candidates:
+        lines.append("_No backfill candidates matched the filters._")
+        lines.append("")
+        out_path.write_text("\n".join(lines))
+        return out_path
+
+    lines.append("---")
+    lines.append("")
+    for c in candidates:
+        src_tag = " _(via board)_" if c.get("source") == "board" else ""
+        lines.append(f"### {c['company']} - {c['title']}{src_tag}")
+        appearance_detail = ""
+        if c.get("appearance_count", 1) > 1:
+            appearance_detail = (
+                f" (seen {c['appearance_count']}x, "
+                f"latest run: {c.get('latest_score', c['highest_score'])})"
+            )
+        lines.append(f"- **Score:** {c['highest_score']}{appearance_detail}")
+        if c.get("location"):
+            lines.append(f"- **Location:** {c['location']}")
+        lines.append(f"- **Tier:** {c['tier']}")
+        if c["first_seen_date"] == c["last_seen_date"]:
+            lines.append(f"- **Seen in digest:** {c['first_seen_date'].isoformat()}")
+        else:
+            lines.append(
+                f"- **First seen:** {c['first_seen_date'].isoformat()} | "
+                f"**Last seen:** {c['last_seen_date'].isoformat()}"
+            )
+        lines.append(f"- **Apply:** {c['url']}")
+        lines.append("")
+
+    out_path.write_text("\n".join(lines))
+    return out_path
+
+
+def run_backfill(
+    digest_dir: Path,
+    applications_file: Path | None,
+    days: int = 30,
+    limit: int = 30,
+    min_score: int | None = None,
+    max_score: int | None = None,
+) -> int:
+    """Scan past digests for matched jobs not yet in the tracker.
+
+    Filters out anything present in applications.md at any status (a `queued`
+    row means the user started on it; subsequent status states all mean they
+    took action, so no row regardless of status should be surfaced).
+    """
+    if not digest_dir.exists():
+        print(f"No digest directory at {digest_dir}")
+        return 1
+
+    cutoff: date | None = None
+    if days > 0:
+        cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+
+    digest_files = sorted(digest_dir.glob("digest-*.md"))
+    all_entries: list[dict] = []
+    digests_scanned = 0
+    for path in digest_files:
+        m = re.match(r"^digest-(\d{4}-\d{2}-\d{2})\.md$", path.name)
+        if not m:
+            continue
+        try:
+            digest_date = datetime.fromisoformat(m.group(1)).date()
+        except ValueError:
+            continue
+        if cutoff and digest_date < cutoff:
+            continue
+        digests_scanned += 1
+        all_entries.extend(parse_digest_matches(path, digest_date))
+
+    if not all_entries:
+        print(f"No matched jobs found in digests ({digests_scanned} file(s) scanned).")
+        # Still write an empty digest so the slash command has something to report
+        out_path = write_backfill_digest([], 0, digests_scanned, days, limit, min_score, max_score, digest_dir)
+        print(f"Digest written: {out_path}")
+        return 0
+
+    tracker_urls, tracker_pairs = load_tracker_identity_keys(applications_file)
+
+    # Aggregate across digests by normalized URL: keep highest score ever seen,
+    # first/last seen dates, appearance count, and the most-recent metadata.
+    # Exclude on both URL match AND (company, title) match - the latter catches
+    # historical digests (pre canonicalization) where the digest has the
+    # LinkedIn URL but the tracker has the ATS URL for the same posting.
+    by_url: dict[str, dict] = {}
+    for entry in all_entries:
+        url_n = normalize_url(entry["url"] or "")
+        if not url_n:
+            continue
+        if url_n in tracker_urls:
+            continue
+        ct_key = (
+            normalize_company(entry.get("company", "")),
+            (entry.get("title", "") or "").lower().strip(),
+        )
+        if ct_key[0] and ct_key[1] and ct_key in tracker_pairs:
+            continue
+        score = entry.get("score") or 0
+
+        agg = by_url.get(url_n)
+        if agg is None:
+            by_url[url_n] = {
+                "company": entry["company"], "title": entry["title"],
+                "url": entry["url"], "location": entry.get("location", ""),
+                "tier": entry["tier"], "source": entry.get("source", "ats"),
+                "first_seen_date": entry["digest_date"],
+                "last_seen_date": entry["digest_date"],
+                "highest_score": score, "latest_score": score,
+                "appearance_count": 1,
+            }
+        else:
+            agg["appearance_count"] += 1
+            if score > agg["highest_score"]:
+                agg["highest_score"] = score
+            if entry["digest_date"] > agg["last_seen_date"]:
+                agg["last_seen_date"] = entry["digest_date"]
+                agg["latest_score"] = score
+                # Refresh display fields from the most-recent sighting
+                agg["company"] = entry["company"]
+                agg["title"] = entry["title"]
+                if entry.get("location"):
+                    agg["location"] = entry["location"]
+            if entry["digest_date"] < agg["first_seen_date"]:
+                agg["first_seen_date"] = entry["digest_date"]
+
+    filtered = []
+    for agg in by_url.values():
+        score = agg["highest_score"]
+        if min_score is not None and score < min_score:
+            continue
+        if max_score is not None and score > max_score:
+            continue
+        filtered.append(agg)
+
+    filtered.sort(
+        key=lambda a: (-a["highest_score"], -a["last_seen_date"].toordinal()),
+    )
+    candidates = filtered[:limit]
+
+    out_path = write_backfill_digest(
+        candidates, len(filtered), digests_scanned, days, limit,
+        min_score, max_score, digest_dir,
+    )
+    print(
+        f"Backfill: {len(filtered)} missed opportunity/ies across {digests_scanned} digest(s) "
+        f"(last {days}d). Top {len(candidates)} written to {out_path}"
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Job Discovery Agent")
     parser.add_argument("--dry-run", action="store_true", help="Run scan but don't update state")
     parser.add_argument("--verify", action="store_true", help="Verify company slugs return results")
     parser.add_argument("--ingest", type=Path, default=None,
                         help="Process manually-supplied postings from a JSON array file")
+    parser.add_argument("--backfill", action="store_true",
+                        help="Scan past digests for matched jobs not yet in the applications tracker")
+    parser.add_argument("--days", type=int, default=30,
+                        help="Backfill window in days (default 30; 0 = all time)")
+    parser.add_argument("--limit", type=int, default=30,
+                        help="Backfill max results shown (default 30)")
+    parser.add_argument("--min-score", type=int, default=None,
+                        help="Backfill: only include jobs with highest-ever score >= N")
+    parser.add_argument("--max-score", type=int, default=None,
+                        help="Backfill: only include jobs with highest-ever score <= N (useful for the 'cast wider net' use case)")
     parser.add_argument("--normalize-url", dest="normalize_url_cli", default=None,
                         help="Print the canonical form of a URL and exit. Used by slash commands for consistent URL comparison.")
     parser.add_argument("--config", type=Path, default=None,
@@ -881,6 +1237,19 @@ def main() -> int:
             digest_dir=digest_dir,
             framework_config=framework_config,
             dry_run=args.dry_run,
+        )
+
+    # Backfill mode reads past digests and reports missed opportunities.
+    if args.backfill:
+        apps_raw = framework_config.get("applications_file")
+        apps_file = Path(apps_raw).expanduser() if apps_raw else None
+        return run_backfill(
+            digest_dir=digest_dir,
+            applications_file=apps_file,
+            days=args.days,
+            limit=args.limit,
+            min_score=args.min_score,
+            max_score=args.max_score,
         )
 
     required_configs = {

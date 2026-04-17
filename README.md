@@ -186,6 +186,7 @@ Build the MCD once. Maintain it as a living document. Update it when you take a 
 |---|---|
 | `/discover [--verify \| --dry-run \| -v]` | Run a discovery scan, show the top new matches by score. |
 | `/ingest <urls \| file>` | Feed manually-found postings (LinkedIn, recruiter emails, etc.) through the same filter + score + candidate pipeline as discovery. Separate digest, read-only against the tracker. |
+| `/backfill [--days N] [--limit N] [--min-score N] [--max-score N]` | Walk back over past digests for matched jobs never logged to the tracker. For casting a wider net or filling gaps when new postings are light. |
 | `/apply <url \| company \| JD path>` | End-to-end: fetch JD, run lane-fit and anti-target checks, tailor resume and cover letter, log application as `queued`. |
 | `/submitted <company> [role hint]` | Flip a `queued` row to `applied` after you submit via the company portal. |
 | `/triage [--limit N] [--days N]` | Classify recent mail in the job-hunt inbox, update tracker status forward along the state machine, schedule interviews on calendar. |
@@ -309,6 +310,20 @@ Example digest output for a surfaced candidate:
 ```
 
 This converts passive JobSpy scraping into an active feed of companies worth promoting to direct-ATS scraping, with zero manual slug hunting when the URL resolves cleanly. Companies whose LinkedIn posts use Easy Apply (no external URL) still get tracked by match count but need manual ATS identification.
+
+### Backfill
+
+When new postings are light or you want to widen the net, `/backfill` walks back over recent `digest-*.md` files and surfaces every matched job that never made it into the tracker at any status. Useful for two patterns:
+
+```
+/backfill                        # last 30 days, top 30 by score
+/backfill --days 14 --limit 50   # two-week window, more results
+/backfill --max-score 10         # focus on lower-scored matches you skipped
+```
+
+Exclusion is strict: any row in `applications.md` regardless of status counts as "already acted on." Matching uses normalized URL first and `(company, title)` as a secondary key, so historical digests holding a LinkedIn URL correctly match tracker rows holding the ATS URL for the same role. Candidates are aggregated across digest appearances, so a role surfaced on three different days reports as one row with appearance count and highest-ever score.
+
+Writes a timestamped `backfill-YYYY-MM-DD-HHMMSS.md`. Read-only against the tracker and state files.
 
 ### Manual ingest
 
