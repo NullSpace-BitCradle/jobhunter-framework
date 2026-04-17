@@ -145,6 +145,10 @@ tier_1_saas:
   - name: Scale AI
     ats: greenhouse
     slug: scaleai
+  # Example Lever entry (uncomment and replace with a real company):
+  # - name: Example Corp
+  #   ats: lever
+  #   slug: examplecorp
 
 tier_1_security_vendor:
   - name: Tenable

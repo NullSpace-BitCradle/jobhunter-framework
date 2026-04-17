@@ -1,40 +1,28 @@
-# jobhunter-framework — top-level user configuration
+# jobhunter-framework - top-level user configuration
 #
 # Copy this file to `config.yaml` and customize the paths for your setup.
 # `config.yaml` is gitignored so your personal paths never leak into the repo.
 #
-# Phase 1 note: the Python discovery tool currently reads its configs from
-# `discovery/config/`. The paths below are the forward-looking shape that
-# Phase 2 will wire up — orchestration commands and the MCD/JD pipeline will
-# read from here so all user data lives in one place outside the repo.
+# Design note: the framework expects all user data (MCD, JDs, output, discovery
+# configs, state, digests, and the applications tracker) to live under a single
+# user-data directory. Keeping everything under one tree makes it simple to
+# back up, move between machines, and keep the framework repo purely code.
 
-# Where your personal career content lives. All other paths default to
-# subdirectories of this unless overridden individually.
 user_data_dir: ~/JobHunt
 
-# Path to your Master Career Document (the source of truth for resumes)
+# Resume writer inputs/outputs
 mcd_path: ~/JobHunt/Master_Career_Document.md
-
-# Directory where generated resumes and cover letters are written
 output_dir: ~/JobHunt/output
-
-# Directory where fetched job description files are stored
 jd_dir: ~/JobHunt/jobs
-
-# Application tracker (created on first /apply run in Phase 2)
 applications_file: ~/JobHunt/applications.md
 
-# Job discovery configuration
+# Job discovery configuration - all data under ~/JobHunt/discovery/
 discovery:
-  # Where the daily digest markdown files are written
-  digest_dir: ~/JobHunt/digests
-  # Where the seen-job state is tracked (for dedup)
-  state_file: ~/JobHunt/state/seen-jobs.json
-  # Override the directory discovery reads its configs from. Leave null
-  # to use the defaults in the repo at discovery/config/.
-  config_dir: null
+  config_dir: ~/JobHunt/discovery/config
+  state_file: ~/JobHunt/discovery/state/seen-jobs.json
+  digest_dir: ~/JobHunt/discovery/output
 
-# Gmail / Calendar integration (Phase 3)
+# Gmail / Calendar integration (optional)
 gmail:
   enabled: false
   account: null
