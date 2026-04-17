@@ -42,6 +42,26 @@ anti_target_patterns:
       - "cism required"
       - "must have cism"
 
+  # 2a. Active clearance or DoD 8570 cert hard-required
+  cleared_contractor_hard_required:
+    description: "Active clearance or DoD 8570 cert required (MCD anti-target)"
+    description_contains_any:
+      - "active top secret"
+      - "active ts/sci"
+      - "active secret clearance"
+      - "ts/sci required"
+      - "ts clearance required"
+      - "top secret required"
+      - "iat level iii"
+      - "iat level 3"
+      - "iam level iii"
+      - "dod 8570"
+      - "dodd 8140"
+    negates_if_description_also_contains:
+      - "or equivalent"
+      - "or eligible"
+      - "clearance eligible"
+
   # 3. Bachelor's degree hard-required
   #    Only blocks explicit "required" language; preferred/equivalent language is allowed.
   degree_hard_required:
