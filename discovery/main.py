@@ -362,11 +362,15 @@ def fetch_all_jobs(companies: dict, verify_mode: bool = False) -> list[Job]:
         ats = entry.get("ats")
         slug = entry.get("slug")
         name = entry.get("name", slug)
+        # Optional per-company timeout override. Falls back to the scraper's
+        # class-level default when absent. Use for slow ATS tenants that need
+        # longer than the 10s default (e.g., some Workday-adjacent or SmartRecruiters tenants).
+        timeout = entry.get("timeout")
         scraper = SCRAPER_REGISTRY.get(ats)
         if not scraper:
             logging.warning("%s: no scraper for ATS '%s'", name, ats)
             continue
-        jobs = scraper.fetch_jobs(slug, name, tier_name)
+        jobs = scraper.fetch_jobs(slug, name, tier_name, timeout=timeout)
         if verify_mode:
             status = "OK " if jobs else "EMPTY/404"
             print(f"  [{status}] {name:28s} {ats:11s} slug={slug:22s} -> {len(jobs):3d} jobs")
@@ -404,6 +408,8 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_
     lines.append(f"- **New since last run:** {stats['new_jobs']}")
     lines.append(f"- **Matches (post-filter):** {len(matches)}")
     lines.append(f"- **Skipped (anti-target):** {len(skipped_anti)}")
+    if stats.get('declined_filtered'):
+        lines.append(f"- **Skipped (previously declined in tracker):** {stats['declined_filtered']}")
     lines.append("")
 
     if not matches:
@@ -539,12 +545,13 @@ def main() -> int:
     apps_raw = framework_config.get("applications_file")
     apps_file = Path(apps_raw).expanduser() if apps_raw else None
     declined_urls = load_declined_urls(apps_file)
+    declined_filtered = 0
     if declined_urls:
         before = len(new_jobs)
         new_jobs = [j for j in new_jobs if getattr(j, "url", None) not in declined_urls]
-        filtered = before - len(new_jobs)
-        if filtered:
-            print(f"Filtered {filtered} previously declined/withdrawn role(s) from tracker")
+        declined_filtered = before - len(new_jobs)
+        if declined_filtered:
+            print(f"Filtered {declined_filtered} previously declined/withdrawn role(s) from tracker")
 
     match_rules = keywords.get("match_rules") or {}
     scoring = keywords.get("scoring") or {}
@@ -581,6 +588,7 @@ def main() -> int:
         "total_fetched": len(all_jobs),
         "board_fetched": len(board_jobs),
         "new_jobs": len(new_jobs),
+        "declined_filtered": declined_filtered,
     }
     out_path = write_digest(results, stats, digest_dir)
     print(f"Digest written to: {out_path}")

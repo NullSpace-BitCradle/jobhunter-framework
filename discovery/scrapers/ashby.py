@@ -13,10 +13,11 @@ class AshbyScraper(Scraper):
     ats_name = "ashby"
     BASE_URL = "https://api.ashbyhq.com/posting-api/job-board/{slug}"
 
-    def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:
+    def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str, timeout: int | None = None) -> list[Job]:
+        effective_timeout = timeout if timeout is not None else self.timeout
         url = self.BASE_URL.format(slug=company_slug)
         try:
-            resp = self._throttled_get(url, params={"includeCompensation": "false"}, timeout=self.timeout)
+            resp = self._throttled_get(url, params={"includeCompensation": "false"}, timeout=effective_timeout)
         except requests.RequestException as e:
             logger.warning("%s: request failed: %s", company_name, e)
             return []

@@ -264,3 +264,128 @@ class TestWorkableScraper:
         scraper = WorkableScraper()
         with _patch_session(scraper, side_effect=requests.ConnectionError("refused")):
             assert scraper.fetch_jobs(*COMPANY) == []
+
+
+# ---------------------------------------------------------------------------
+# Retry behavior (base Scraper class)
+# ---------------------------------------------------------------------------
+
+class TestRetryBehavior:
+    """Verify _throttled_get retries on transient errors with exponential backoff.
+
+    All time.sleep calls are patched so tests run fast. We use GreenhouseScraper
+    as the concrete test vehicle since all ATS scrapers share the same base
+    _throttled_get implementation.
+    """
+
+    @patch("scrapers.base.time.sleep")
+    def test_retries_on_503_then_succeeds(self, mock_sleep):
+        scraper = GreenhouseScraper()
+        responses = [_mock_response(503), _mock_response(json_data=GREENHOUSE_RESPONSE)]
+        with patch.object(scraper.session, "get", side_effect=responses):
+            jobs = scraper.fetch_jobs(*COMPANY)
+        assert len(jobs) == 2  # succeeded on second try
+        # Verify we slept once between attempts
+        assert mock_sleep.called
+
+    @patch("scrapers.base.time.sleep")
+    def test_retries_on_5xx_up_to_max(self, mock_sleep):
+        scraper = GreenhouseScraper()
+        # 3 consecutive 503s - exhausts retries, returns last response
+        responses = [_mock_response(503), _mock_response(503), _mock_response(503)]
+        with patch.object(scraper.session, "get", side_effect=responses):
+            jobs = scraper.fetch_jobs(*COMPANY)
+        assert jobs == []  # scraper sees last 503 as not-ok and returns empty
+
+    @patch("scrapers.base.time.sleep")
+    def test_retries_on_timeout_then_succeeds(self, mock_sleep):
+        scraper = GreenhouseScraper()
+        # First call times out, second succeeds
+        with patch.object(
+            scraper.session, "get",
+            side_effect=[requests.Timeout("t"), _mock_response(json_data=GREENHOUSE_RESPONSE)],
+        ):
+            jobs = scraper.fetch_jobs(*COMPANY)
+        assert len(jobs) == 2
+
+    @patch("scrapers.base.time.sleep")
+    def test_timeout_exhausted_raises(self, mock_sleep):
+        """After MAX_RETRIES timeouts, the exception propagates and the scraper catches it."""
+        scraper = GreenhouseScraper()
+        with patch.object(
+            scraper.session, "get",
+            side_effect=[requests.Timeout("t")] * 3,
+        ):
+            jobs = scraper.fetch_jobs(*COMPANY)
+        # scraper's try/except RequestException catches the final raise
+        assert jobs == []
+
+    @patch("scrapers.base.time.sleep")
+    def test_honors_retry_after_header(self, mock_sleep):
+        """429 with Retry-After should drive the sleep duration."""
+        scraper = GreenhouseScraper()
+        rate_limited = _mock_response(429)
+        rate_limited.headers = {"Retry-After": "3"}
+        ok_resp = _mock_response(json_data=GREENHOUSE_RESPONSE)
+        with patch.object(scraper.session, "get", side_effect=[rate_limited, ok_resp]):
+            jobs = scraper.fetch_jobs(*COMPANY)
+        assert len(jobs) == 2
+        # First sleep arg should include the 3s Retry-After (vs. default 1s backoff)
+        sleep_calls = [c.args[0] for c in mock_sleep.call_args_list if c.args]
+        assert any(s >= 3 for s in sleep_calls)
+
+    @patch("scrapers.base.time.sleep")
+    def test_retry_after_cap(self, mock_sleep):
+        """Retry-After cap prevents absurdly long waits."""
+        scraper = GreenhouseScraper()
+        rate_limited = _mock_response(429)
+        rate_limited.headers = {"Retry-After": "9999"}
+        ok_resp = _mock_response(json_data=GREENHOUSE_RESPONSE)
+        with patch.object(scraper.session, "get", side_effect=[rate_limited, ok_resp]):
+            scraper.fetch_jobs(*COMPANY)
+        sleep_calls = [c.args[0] for c in mock_sleep.call_args_list if c.args]
+        # cap is 10.0 - no sleep should exceed that
+        assert max(sleep_calls) <= 10.0
+
+
+# ---------------------------------------------------------------------------
+# Per-company timeout override
+# ---------------------------------------------------------------------------
+
+class TestTimeoutOverride:
+    def test_timeout_override_used_when_provided(self):
+        scraper = GreenhouseScraper()  # default self.timeout=10
+        captured = {}
+
+        def capture(url, **kwargs):
+            captured.update(kwargs)
+            return _mock_response(json_data={"jobs": []})
+
+        with patch.object(scraper, "_throttled_get", side_effect=capture):
+            scraper.fetch_jobs(*COMPANY, timeout=45)
+        assert captured.get("timeout") == 45
+
+    def test_falls_back_to_self_timeout_when_none(self):
+        scraper = GreenhouseScraper()
+        captured = {}
+
+        def capture(url, **kwargs):
+            captured.update(kwargs)
+            return _mock_response(json_data={"jobs": []})
+
+        with patch.object(scraper, "_throttled_get", side_effect=capture):
+            scraper.fetch_jobs(*COMPANY)  # no timeout override
+        assert captured.get("timeout") == scraper.timeout  # 10
+
+    def test_ashby_default_timeout(self):
+        """Ashby scraper in main.py's SCRAPER_REGISTRY is instantiated with timeout=20."""
+        scraper = AshbyScraper(timeout=20)
+        captured = {}
+
+        def capture(url, **kwargs):
+            captured.update(kwargs)
+            return _mock_response(json_data={"jobs": []})
+
+        with patch.object(scraper, "_throttled_get", side_effect=capture):
+            scraper.fetch_jobs(*COMPANY)
+        assert captured.get("timeout") == 20

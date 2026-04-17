@@ -22,7 +22,8 @@ class SmartRecruitersScraper(Scraper):
     PAGE_SIZE = 100
     MAX_PAGES = 50
 
-    def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:
+    def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str, timeout: int | None = None) -> list[Job]:
+        effective_timeout = timeout if timeout is not None else self.timeout
         url = self.BASE_URL.format(slug=company_slug)
         all_raw: list[dict] = []
         offset = 0
@@ -32,7 +33,7 @@ class SmartRecruitersScraper(Scraper):
                 resp = self._throttled_get(
                     url,
                     params={"limit": self.PAGE_SIZE, "offset": offset},
-                    timeout=self.timeout,
+                    timeout=effective_timeout,
                 )
             except requests.RequestException as e:
                 logger.warning("%s: request failed (offset %d): %s", company_name, offset, e)

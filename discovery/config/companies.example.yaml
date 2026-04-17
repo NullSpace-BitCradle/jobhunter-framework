@@ -9,6 +9,15 @@
 #   ats: greenhouse | lever | ashby | smartrecruiters | workable
 #   slug: the identifier the ATS uses for this company's public board
 #
+# Optional per-entry fields:
+#   timeout: N   # seconds per-request timeout override (default 10s for most
+#                # scrapers, 20s for Ashby). Use for slow tenants.
+#                # Example:
+#                #   - name: SlowCorp
+#                #     ats: smartrecruiters
+#                #     slug: slowcorp
+#                #     timeout: 30
+#
 # To verify a slug, open the company's careers page and click through to a
 # specific job. The URL will reveal the ATS and slug:
 #   boards.greenhouse.io/<slug>/...     → ats: greenhouse

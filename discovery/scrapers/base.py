@@ -62,6 +62,12 @@ USER_AGENT = "JobHunter-Framework/1.0 (personal job search tool)"
 
 REQUEST_DELAY_SECONDS = 0.5
 
+# Retry configuration for transient errors. 3 attempts total with exponential
+# backoff (1s, 2s waits between retries). 429 honors Retry-After when present.
+MAX_RETRIES = 3
+RETRYABLE_STATUS = (429, 500, 502, 503, 504)
+RETRY_AFTER_CAP_SECONDS = 10.0
+
 
 class Scraper:
     """Base class for ATS scrapers. Subclasses implement fetch_jobs."""
@@ -75,12 +81,55 @@ class Scraper:
         self.session.headers["User-Agent"] = USER_AGENT
 
     def _throttled_get(self, url: str, **kwargs) -> requests.Response:
-        """GET with rate limiting between requests."""
-        elapsed = time.monotonic() - self._last_request_time
-        if elapsed < self.delay:
-            time.sleep(self.delay - elapsed)
-        self._last_request_time = time.monotonic()
-        return self.session.get(url, **kwargs)
+        """GET with rate limiting + exponential-backoff retry on transient errors.
 
-    def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:
+        Retries on 429/5xx status codes and on Timeout/ConnectionError exceptions
+        up to MAX_RETRIES total attempts. Honors the Retry-After header on 429
+        responses when it parses as a number of seconds (capped at
+        RETRY_AFTER_CAP_SECONDS). Rate-limit throttling applies to every attempt.
+        """
+        last_resp: requests.Response | None = None
+        last_exc: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            # Rate-limit throttle before every attempt
+            elapsed = time.monotonic() - self._last_request_time
+            if elapsed < self.delay:
+                time.sleep(self.delay - elapsed)
+            self._last_request_time = time.monotonic()
+
+            try:
+                resp = self.session.get(url, **kwargs)
+            except (requests.Timeout, requests.ConnectionError) as e:
+                last_exc = e
+                if attempt == MAX_RETRIES - 1:
+                    raise
+                time.sleep(2 ** attempt)  # 1s, 2s
+                continue
+
+            last_resp = resp
+            if resp.status_code not in RETRYABLE_STATUS or attempt == MAX_RETRIES - 1:
+                return resp
+
+            # Transient status - back off then retry
+            wait = 2 ** attempt  # 1s, 2s
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        wait = min(float(retry_after), RETRY_AFTER_CAP_SECONDS)
+                    except ValueError:
+                        pass  # ignore non-numeric Retry-After (HTTP-date form)
+            time.sleep(wait)
+
+        # Loop exit fallthrough - return the last response we saw
+        assert last_resp is not None  # unreachable; exception path returns above
+        return last_resp
+
+    def fetch_jobs(
+        self,
+        company_slug: str,
+        company_name: str,
+        company_tier: str,
+        timeout: int | None = None,
+    ) -> list[Job]:
         raise NotImplementedError

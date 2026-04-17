@@ -134,3 +134,27 @@ class TestWriteDigest:
         content = out.read_text()
         assert "_(via board)_" in content
         assert "Board jobs (JobSpy):** 5" in content
+
+    def test_declined_filtered_appears_when_nonzero(self, tmp_path):
+        """When discovery skipped previously-declined URLs, the digest header reports it."""
+        stats = {
+            "companies_scanned": 5,
+            "total_fetched": 100,
+            "new_jobs": 10,
+            "declined_filtered": 7,
+        }
+        out = write_digest([], stats, tmp_path)
+        content = out.read_text()
+        assert "Skipped (previously declined in tracker):** 7" in content
+
+    def test_declined_filtered_omitted_when_zero(self, tmp_path):
+        """When no declined URLs were filtered, the header line is omitted (not '0')."""
+        stats = {
+            "companies_scanned": 5,
+            "total_fetched": 100,
+            "new_jobs": 10,
+            "declined_filtered": 0,
+        }
+        out = write_digest([], stats, tmp_path)
+        content = out.read_text()
+        assert "previously declined" not in content

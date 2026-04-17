@@ -21,10 +21,11 @@ class WorkableScraper(Scraper):
     ats_name = "workable"
     BASE_URL = "https://apply.workable.com/api/v1/widget/accounts/{slug}"
 
-    def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:
+    def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str, timeout: int | None = None) -> list[Job]:
+        effective_timeout = timeout if timeout is not None else self.timeout
         url = self.BASE_URL.format(slug=company_slug)
         try:
-            resp = self._throttled_get(url, params={"details": "true"}, timeout=self.timeout)
+            resp = self._throttled_get(url, params={"details": "true"}, timeout=effective_timeout)
         except requests.RequestException as e:
             logger.warning("%s: request failed: %s", company_name, e)
             return []
