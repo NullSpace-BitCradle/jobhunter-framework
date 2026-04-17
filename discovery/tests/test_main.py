@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from main import load_state, save_state, write_digest
+from main import load_state, save_state, write_digest, load_declined_urls
 from scrapers.base import Job
 
 
@@ -158,3 +158,65 @@ class TestWriteDigest:
         out = write_digest([], stats, tmp_path)
         content = out.read_text()
         assert "previously declined" not in content
+
+
+# ---------------------------------------------------------------------------
+# load_declined_urls - URL normalization
+# ---------------------------------------------------------------------------
+
+class TestLoadDeclinedUrlsNormalization:
+    """URLs in applications.md often have tracking params from the session the
+    user was browsing in. A later scan picks up the same job with different
+    tracking - if we compared raw URLs the skip list would miss. These tests
+    confirm the stored set is normalized so same-posting comparisons match.
+    """
+
+    def _tracker(self, tmp_path, rows: list[tuple[str, str]]):
+        """Write a minimal tracker with (status, url) rows."""
+        lines = [
+            "| Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for status, url in rows:
+            lines.append(f"| 2026-04-10 | Foo | Sr Sec Eng | {status} | 2026-04-12 | 10 |  | {url} | |")
+        path = tmp_path / "applications.md"
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    def test_strips_tracking_from_stored_urls(self, tmp_path):
+        tracker = self._tracker(tmp_path, [
+            ("rejected", "<https://www.linkedin.com/jobs/view/4401234567?trk=abc&refId=xyz>"),
+        ])
+        declined = load_declined_urls(tracker)
+        # The stored entry should have no tracking params
+        assert "https://www.linkedin.com/jobs/view/4401234567" in declined
+        assert not any("trk=" in u for u in declined)
+
+    def test_markdown_link_syntax_handled(self, tmp_path):
+        tracker = self._tracker(tmp_path, [
+            ("rejected", "[LinkedIn](https://www.linkedin.com/jobs/view/42?utm_source=email)"),
+        ])
+        declined = load_declined_urls(tracker)
+        assert "https://www.linkedin.com/jobs/view/42" in declined
+
+    def test_non_terminal_status_not_included(self, tmp_path):
+        tracker = self._tracker(tmp_path, [
+            ("queued", "<https://www.linkedin.com/jobs/view/1>"),
+            ("applied", "<https://www.linkedin.com/jobs/view/2>"),
+            ("rejected", "<https://www.linkedin.com/jobs/view/3>"),
+        ])
+        declined = load_declined_urls(tracker)
+        assert "https://www.linkedin.com/jobs/view/3" in declined
+        assert "https://www.linkedin.com/jobs/view/1" not in declined
+        assert "https://www.linkedin.com/jobs/view/2" not in declined
+
+    def test_different_sessions_same_posting_match(self, tmp_path):
+        """A URL stored with session-A tracking should match a scan that sees session-B tracking."""
+        from url_utils import normalize_url
+        tracker = self._tracker(tmp_path, [
+            ("rejected", "<https://www.linkedin.com/jobs/view/1001?trk=session_a&refId=x>"),
+        ])
+        declined = load_declined_urls(tracker)
+        # Simulate the scan seeing the same job with different tracking
+        scan_url = "https://www.linkedin.com/jobs/view/1001?trk=session_b&utm_source=newsletter"
+        assert normalize_url(scan_url) in declined

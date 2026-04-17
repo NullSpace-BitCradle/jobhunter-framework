@@ -4,6 +4,9 @@ import logging
 from datetime import datetime, timezone
 
 from .base import Job, Scraper
+# url_utils lives at discovery/ root (one level up from scrapers/); scrapers are
+# run with discovery/ on sys.path so the import works without path gymnastics.
+from url_utils import canonical_url, normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +105,17 @@ class JobspyScraper(Scraper):
     def _row_to_job(self, row, pd) -> Job | None:
         """Map a jobspy DataFrame row to a Job dataclass."""
         site = str(row.get("site", "unknown")).lower()
-        job_url = str(row.get("job_url", ""))
+        aggregator_url = str(row.get("job_url", ""))
+        direct_url = str(row.get("job_url_direct") or "")
 
-        # Deterministic hash - stable across Python processes/runs
+        # Canonicalize: prefer the ATS URL over the LinkedIn/Indeed URL when
+        # job_url_direct resolves to a supported ATS. The ATS URL is more
+        # stable (LinkedIn URLs expire), carries the real slug for candidate
+        # tracking, and matches the URL the company uses in ack mail.
+        job_url = canonical_url(aggregator_url, [direct_url])
+
+        # Deterministic ID based on the canonicalized URL so re-scans of the
+        # same posting produce the same ID even if the tracking params differ.
         url_hash = hashlib.sha256(job_url.encode()).hexdigest()[:16] if job_url else "unknown"
         job_id = f"jobspy:{site}:{url_hash}"
 
@@ -149,9 +160,13 @@ class JobspyScraper(Scraper):
         # Preserve supplementary URLs that often contain the company's real ATS
         # slug. LinkedIn's job_url_direct is the external-apply URL; company_url
         # variants are careers-page links. Candidate tracking uses these to
-        # auto-detect ATS platform and slug for promotion suggestions.
+        # auto-detect ATS platform and slug for promotion suggestions. We also
+        # preserve the original aggregator URL here so the LinkedIn/Indeed
+        # provenance stays discoverable even though Job.url now resolves to the
+        # ATS URL when one is available.
         raw = {
-            "job_url_direct": str(row.get("job_url_direct") or ""),
+            "aggregator_url": aggregator_url,
+            "job_url_direct": direct_url,
             "company_url": str(row.get("company_url") or ""),
             "company_url_direct": str(row.get("company_url_direct") or ""),
         }

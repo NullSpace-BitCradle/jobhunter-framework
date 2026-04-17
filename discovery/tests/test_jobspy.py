@@ -123,3 +123,71 @@ class TestJobspyScraper:
         """The per-company fetch_jobs() interface is not supported."""
         with pytest.raises(NotImplementedError):
             self.scraper.fetch_jobs("slug", "name", "tier")
+
+
+# ---------------------------------------------------------------------------
+# URL canonicalization on ingest
+# ---------------------------------------------------------------------------
+
+class TestUrlCanonicalization:
+    """When JobSpy returns a row with job_url_direct pointing to an ATS, the
+    resulting Job.url should be the ATS URL (normalized), not the LinkedIn
+    URL. The LinkedIn URL is preserved in raw for provenance.
+    """
+
+    def setup_method(self):
+        self.scraper = JobspyScraper()
+
+    @patch("jobspy.scrape_jobs")
+    def test_prefers_ats_direct_url(self, mock_scrape):
+        row = {
+            "site": "linkedin",
+            "title": "Staff Security Engineer",
+            "company": "Foo Corp",
+            "job_url": "https://www.linkedin.com/jobs/view/12345?trk=public",
+            "job_url_direct": "https://boards.greenhouse.io/foocorp/jobs/5555",
+            "city": "SF", "state": "CA", "country": "US",
+            "description": "...",
+        }
+        mock_scrape.return_value = _make_df([row])
+        jobs = self.scraper.fetch_jobs_by_search({"sites": ["linkedin"]}, {})
+        assert len(jobs) == 1
+        j = jobs[0]
+        assert j.url == "https://boards.greenhouse.io/foocorp/jobs/5555"
+        # Aggregator URL still available in raw for provenance
+        assert j.raw.get("aggregator_url") == "https://www.linkedin.com/jobs/view/12345?trk=public"
+
+    @patch("jobspy.scrape_jobs")
+    def test_keeps_linkedin_when_no_ats_direct(self, mock_scrape):
+        """When job_url_direct is empty or not an ATS, the LinkedIn URL is used (normalized)."""
+        row = {
+            "site": "linkedin",
+            "title": "Engineer",
+            "company": "X",
+            "job_url": "https://www.linkedin.com/jobs/view/999?trk=abc&utm_source=x",
+            "job_url_direct": "",
+            "description": "",
+        }
+        mock_scrape.return_value = _make_df([row])
+        jobs = self.scraper.fetch_jobs_by_search({"sites": ["linkedin"]}, {})
+        # Tracking stripped; LinkedIn kept since nothing else was ATS
+        assert jobs[0].url == "https://www.linkedin.com/jobs/view/999"
+
+    @patch("jobspy.scrape_jobs")
+    def test_id_stable_across_tracking_variations(self, mock_scrape):
+        """Same posting with different tracking params should produce the same job_id."""
+        row_a = {
+            "site": "linkedin", "title": "T", "company": "C",
+            "job_url": "https://www.linkedin.com/jobs/view/42?trk=a",
+            "description": "",
+        }
+        row_b = {
+            "site": "linkedin", "title": "T", "company": "C",
+            "job_url": "https://www.linkedin.com/jobs/view/42?trk=b&utm_source=x",
+            "description": "",
+        }
+        mock_scrape.return_value = _make_df([row_a])
+        jobs_a = self.scraper.fetch_jobs_by_search({"sites": ["linkedin"]}, {})
+        mock_scrape.return_value = _make_df([row_b])
+        jobs_b = self.scraper.fetch_jobs_by_search({"sites": ["linkedin"]}, {})
+        assert jobs_a[0].id == jobs_b[0].id

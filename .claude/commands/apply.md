@@ -33,7 +33,9 @@ The user's input is one of:
 - Posted date (if visible)
 - Full description text, stripped of nav / footer / cookie banners
 
-If the fetch returns 403, an empty body, or obviously wrong content, **stop and ask the user to paste the JD text directly.** Do not fabricate.
+**Canonicalize the URL before recording.** If the submitted URL is on LinkedIn, Indeed, Glassdoor, or a similar aggregator AND the fetched page reveals a direct-apply URL on a supported ATS (`boards.greenhouse.io`, `jobs.lever.co`, `jobs.ashbyhq.com`, `jobs.smartrecruiters.com`, `apply.workable.com`), use the ATS URL as the URL-of-record from here on. ATS URLs are more stable, match what appears in company ack emails, and give `/triage` a clean key to correlate mail against. The user's submitted URL stays accurate in the JD file frontmatter ("Source:") but the tracker, JD filename components, and all downstream references use the canonical URL.
+
+If WebFetch returns 403, an empty body, or obviously wrong content, **stop and ask the user to paste the JD text directly.** Do not fabricate.
 
 **A company or role name** - read the most recent `<discovery.digest_dir>/digest-YYYY-MM-DD.md`. Find the matching entry (ask the user to disambiguate if there are multiple). Extract the URL from that entry, then proceed as URL case.
 
@@ -72,7 +74,13 @@ Output files land in `<output_dir>` following the naming convention:
 
 ## Step 3.5 - Duplicate check
 
-Before logging, scan the existing `<applications_file>` for any row whose URL column matches the source URL (strip markdown auto-link wrappers `<url>` and `[text](url)` when comparing). Also match on exact `Company + Role` even if the URL differs, since the same role can be re-posted at a new URL.
+Before logging, scan the existing `<applications_file>` for any row whose URL column matches the source URL. Compare using the canonical form - tracking parameters (`?utm_source=...`, `?trk=...`, `?refId=...`) vary between sessions and must not defeat the match. To get a canonical form for comparison, run:
+
+```bash
+cd <repo>/discovery && source venv/bin/activate && python main.py --normalize-url "<url>"
+```
+
+Do this for both the incoming URL (from Step 2) and each candidate row's URL (strip markdown auto-link wrappers `<url>` and `[text](url)` first). Also match on exact `Company + Role` even if the URL differs, since the same role can be re-posted at a new URL.
 
 If a duplicate is found:
 

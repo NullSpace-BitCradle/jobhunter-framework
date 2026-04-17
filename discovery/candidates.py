@@ -11,13 +11,16 @@ suggestion includes a copy-paste-ready companies.yaml entry.
 import fcntl
 import json
 import logging
-import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
 from scrapers.base import Job
 from dedup import normalize_company
+# Re-export detect_ats_from_url for backward compat with any caller importing
+# it from candidates. url_utils is the single source of truth for ATS URL
+# pattern matching; both candidate tracking and jobspy canonicalization use it.
+from url_utils import detect_ats_from_url, normalize_url  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -31,41 +34,6 @@ CANDIDATE_MAX_AGE_DAYS = 90
 # Max sample titles / urls stored per candidate (for digest display)
 MAX_SAMPLE_TITLES = 5
 MAX_SAMPLE_URLS = 3
-
-# ATS URL patterns - extract (ats_name, slug) from any URL that resolves to
-# one of the five supported ATS platforms. Order matters: more-specific
-# patterns (api.* endpoints) come before general (jobs.*, boards.*).
-_ATS_URL_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # Greenhouse: boards.greenhouse.io/foo, job-boards.greenhouse.io/foo,
-    # boards-api.greenhouse.io/v1/boards/foo
-    (re.compile(r"(?:job-)?boards(?:-api)?\.greenhouse\.io/(?:v\d+/boards/)?([a-zA-Z0-9_.-]+?)(?:/|$)"), "greenhouse"),
-    # Lever: jobs.lever.co/foo, api.lever.co/v0/postings/foo
-    (re.compile(r"api\.lever\.co/v\d+/postings/([a-zA-Z0-9_.-]+?)(?:/|$)"), "lever"),
-    (re.compile(r"jobs\.lever\.co/([a-zA-Z0-9_.-]+?)(?:/|$)"), "lever"),
-    # Ashby
-    (re.compile(r"api\.ashbyhq\.com/posting-api/job-board/([a-zA-Z0-9_.-]+?)(?:/|$)"), "ashby"),
-    (re.compile(r"jobs\.ashbyhq\.com/([a-zA-Z0-9_.-]+?)(?:/|$)"), "ashby"),
-    # SmartRecruiters
-    (re.compile(r"api\.smartrecruiters\.com/v\d+/companies/([a-zA-Z0-9_.-]+?)(?:/|$)"), "smartrecruiters"),
-    (re.compile(r"jobs\.smartrecruiters\.com/([a-zA-Z0-9_.-]+?)(?:/|$)"), "smartrecruiters"),
-    # Workable
-    (re.compile(r"apply\.workable\.com/([a-zA-Z0-9_.-]+?)(?:/|$)"), "workable"),
-]
-
-
-def detect_ats_from_url(url: Optional[str]) -> Optional[tuple[str, str]]:
-    """Return (ats_name, slug) if URL matches a known ATS pattern, else None."""
-    if not url:
-        return None
-    for pattern, ats in _ATS_URL_PATTERNS:
-        m = pattern.search(url)
-        if m:
-            slug = m.group(1)
-            # Filter out obvious non-slug matches
-            if slug in ("embed", "v1", "v2", "api", "boards", "jobs", "postings"):
-                continue
-            return ats, slug
-    return None
 
 
 def is_known_company(company: str, companies_cfg: dict) -> bool:

@@ -48,7 +48,9 @@ For each URL, use the WebFetch tool to retrieve the page. Extract:
 - If they paste, use that as the description and do a best-effort extraction of title/company from the pasted text. Ask them to confirm company + title if you can't extract cleanly.
 - If they say `skip`, drop the URL and move to the next one.
 
-**LinkedIn specifics:** LinkedIn routinely 403s on WebFetch. Expect to fall back to paste for LinkedIn URLs. Job postings on LinkedIn often include an "Apply on company website" link; if the user's paste includes a URL that resolves to a supported ATS (`boards.greenhouse.io`, `jobs.lever.co`, `jobs.ashbyhq.com`, `jobs.smartrecruiters.com`, `apply.workable.com`), prefer using that direct URL instead - it gives cleaner fetches AND it lets candidate tracking auto-detect the ATS slug.
+**LinkedIn specifics:** LinkedIn routinely 403s on WebFetch. Expect to fall back to paste for LinkedIn URLs. Job postings on LinkedIn often include an "Apply on company website" link; if the user's paste includes a URL that resolves to a supported ATS (`boards.greenhouse.io`, `jobs.lever.co`, `jobs.ashbyhq.com`, `jobs.smartrecruiters.com`, `apply.workable.com`), **prefer that direct URL as the recorded URL** - it gives cleaner fetches, lets candidate tracking auto-detect the ATS slug, and matches what the company uses in ack emails (so `/triage` correlates mail correctly later).
+
+**Canonicalization rule:** If WebFetch on the submitted LinkedIn/Indeed URL lands on (via redirect) or reveals (via "Apply at" link, Open Graph metadata, or structured data) an ATS URL, use the ATS URL as the `url` field in the posting JSON. Store the original aggregator URL nowhere - the ATS URL is the URL-of-record for this posting.
 
 ## Step 4 - Write postings JSON
 

@@ -29,6 +29,7 @@ from scrapers.smartrecruiters import SmartRecruitersScraper
 from scrapers.workable import WorkableScraper
 from scrapers.jobspy import JobspyScraper
 from dedup import deduplicate_cross_source, normalize_company
+from url_utils import normalize_url
 import candidates as candidates_mod
 
 
@@ -146,8 +147,11 @@ def load_declined_urls(applications_file: Path | None) -> set[str]:
             url = url.strip().strip("<>")
             if url.startswith("[") and "](" in url and url.endswith(")"):
                 url = url.split("](", 1)[1].rstrip(")")
-            if status in _TRACKER_TERMINAL_STATUSES and url:
-                declined.add(url)
+            # Normalize for comparison - tracking params and fragments vary
+            # between sessions and must not defeat the skip-list match.
+            normalized = normalize_url(url)
+            if status in _TRACKER_TERMINAL_STATUSES and normalized:
+                declined.add(normalized)
     except Exception as e:
         logging.warning("Could not parse applications tracker %s: %s", applications_file, e)
     return declined
@@ -782,7 +786,10 @@ def run_ingest(
     apps_raw = framework_config.get("applications_file")
     apps_file = Path(apps_raw).expanduser() if apps_raw else None
     declined_urls = load_declined_urls(apps_file)
-    declined_hits = [j for j in jobs if j.url in declined_urls]
+    declined_hits = [
+        j for j in jobs
+        if normalize_url(j.url or "") in declined_urls
+    ]
 
     # Filter + score + track (results tuple: score, job, is_match, anti_reason, filter_reason)
     results: list[tuple[int, Job, bool, str, str]] = []
@@ -838,10 +845,17 @@ def main() -> int:
     parser.add_argument("--verify", action="store_true", help="Verify company slugs return results")
     parser.add_argument("--ingest", type=Path, default=None,
                         help="Process manually-supplied postings from a JSON array file")
+    parser.add_argument("--normalize-url", dest="normalize_url_cli", default=None,
+                        help="Print the canonical form of a URL and exit. Used by slash commands for consistent URL comparison.")
     parser.add_argument("--config", type=Path, default=None,
                         help="Path to framework config.yaml (default: ../config.yaml relative to this file)")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
+
+    # URL normalization short-circuit - no config/state needed.
+    if args.normalize_url_cli:
+        print(normalize_url(args.normalize_url_cli))
+        return 0
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -943,7 +957,10 @@ def main() -> int:
     declined_filtered = 0
     if declined_urls:
         before = len(new_jobs)
-        new_jobs = [j for j in new_jobs if getattr(j, "url", None) not in declined_urls]
+        new_jobs = [
+            j for j in new_jobs
+            if normalize_url(getattr(j, "url", "") or "") not in declined_urls
+        ]
         declined_filtered = before - len(new_jobs)
         if declined_filtered:
             print(f"Filtered {declined_filtered} previously declined/withdrawn role(s) from tracker")

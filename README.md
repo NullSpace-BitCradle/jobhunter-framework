@@ -265,11 +265,23 @@ jobspy:
 
 If `search_term` is not set, discovery auto-builds one from your `domain_keywords_in_title`.
 
+### URL canonicalization
+
+Every URL that lands in the digest, tracker, or candidate state goes through a canonical form:
+
+- When JobSpy returns a LinkedIn or Indeed posting with an external `job_url_direct` that resolves to a supported ATS (`boards.greenhouse.io`, `jobs.lever.co`, `jobs.ashbyhq.com`, `jobs.smartrecruiters.com`, `apply.workable.com`), the **ATS URL becomes the URL of record**, not the LinkedIn URL. ATS URLs are more stable, carry the company slug for candidate tracking, and match what the company uses in ack emails so `/triage` can correlate mail reliably.
+- Tracking query parameters (`utm_*`, `trk`, `refId`, `originalReferer`, `gclid`, etc.) are stripped. Same posting shared across sessions with different tracking still matches for dedup purposes.
+- Fragment identifiers are dropped, trailing slashes normalized, scheme + host lowercased. Path case preserved (SmartRecruiters slugs can be `OracleCorporation`, etc.).
+- `/apply` and `/ingest` both apply the same canonicalization. When WebFetch on a LinkedIn URL resolves to an ATS page, the tracker entry uses the ATS URL.
+- `load_declined_urls` (which builds the skip-list from terminal-status tracker rows) normalizes URLs at read time, so scan-side comparisons match regardless of tracking param drift.
+
+Slash commands that need canonical form on demand can call `python discovery/main.py --normalize-url "<url>"`.
+
 ### Deduplication
 
 Discovery deduplicates at two levels:
 
-1. **Within-source** - every job gets a unique ID (`{ats}:{slug}:{id}` for ATS, `jobspy:{site}:{hash}` for boards). IDs are tracked in `seen-jobs.json`; jobs seen on prior runs are filtered out. IDs age out after 60 days or when the file hits 50,000 entries, whichever comes first.
+1. **Within-source** - every job gets a unique ID (`{ats}:{slug}:{id}` for ATS, `jobspy:{site}:{hash}` for boards; the `{hash}` is of the canonicalized URL, so tracking-param variations don't fork the ID). IDs are tracked in `seen-jobs.json`; jobs seen on prior runs are filtered out. IDs age out after 60 days or when the file hits 50,000 entries, whichever comes first.
 2. **Cross-source** - when the same role appears on both an ATS and a job board, fuzzy matching on normalized company name and title keeps only the ATS version (richer description, direct apply link).
 
 ### Candidate company discovery
