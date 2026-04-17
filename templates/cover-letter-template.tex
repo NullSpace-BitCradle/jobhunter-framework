@@ -5,26 +5,28 @@
 % Part of the jobhunter-framework project.
 %
 % TeX Live package dependencies (beyond base texlive-latex-base):
-%   texlive-latex-recommended  (ragged2e, microtype)
-%   texlive-fonts-extra        (fontawesome5)
+% texlive-latex-recommended (ragged2e, microtype)
+% texlive-fonts-extra (fontawesome5)
 % On Debian/Ubuntu/WSL, these are usually covered by:
-%   texlive-latex-recommended texlive-latex-extra texlive-fonts-extra
+% texlive-latex-recommended texlive-latex-extra texlive-fonts-extra
 % Or install individual packages via `tlmgr --usermode install <pkg>`.
 %%%%
 
 \documentclass[11pt, letterpaper, roman]{letter}
 
+% COMPILE WITH: xelatex (or lualatex). The letter document class forces pdfTeX
+% to render its body text as Type 3 bitmap fonts, which breaks ATS ligature
+% extraction ("Staff" -> "Sta", "findings" -> "ndings", etc.). Switching to
+% xelatex + fontspec gives us scalable Charter via the system font stack, with
+% proper ToUnicode mapping so pdftotext / ATS parsers see the real words.
+\usepackage{fontspec}
+\setmainfont{Bitstream Charter}
+
 \usepackage[top = 12mm, bottom = 12mm, left=10mm, right=10mm]{geometry}
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
 \usepackage{ragged2e}
 
 \usepackage[USenglish]{babel}
-% microtype `expansion=false`: icon fonts (fontawesome5) are not configured
-% for automatic font expansion. Leaving expansion enabled causes pdfTeX to
-% fail with "auto expansion is only possible with scalable fonts." Protrusion
-% (the other half of microtype) still works for body text.
-\usepackage[stretch = 25, shrink = 25, expansion=false]{microtype}
+\usepackage{microtype}
 
 % fontawesome5 instead of the legacy `fontawesome` package. fontawesome5 is
 % still shipped and maintained; the legacy `fontawesome` package is an older
@@ -47,40 +49,40 @@
 \raggedbottom
 
 \begin{minipage}[t]{0.5\textwidth}
-    \vspace*{\fill}
-    \textsc{{\Huge Your Name}}
-    \vspace*{\fill}
+ \vspace*{\fill}
+ \textsc{{\Huge Your Name}}
+ \vspace*{\fill}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.3\textwidth}
-    \setlength{\baselineskip}{15pt}
-    \RaggedLeft
-    \faMobile{} 123-456-7890\\
-    \faHome{} City, State\\
-    \faEnvelope{} you@example.com\\
-    \faLinkedin{} in/yourprofile
+ \setlength{\baselineskip}{15pt}
+ \RaggedLeft
+ \faMobile{} 123-456-7890\\
+ \faHome{} City, State\\
+ \faEnvelope{} you@example.com\\
+ \faLinkedin{} in/yourprofile
 \end{minipage}
 
 {\color{cvteal} \rule{\linewidth}{1mm}}
 
 \begin{minipage}[t]{\textwidth}
 
-    \begin{letter}{Hiring Manager\\Company Name\\City, State}
+ \begin{letter}{Hiring Manager\\Company Name\\City, State}
 \setlength{\parskip}{5pt}
 \setlength{\baselineskip}{15pt}
-    \opening{Dear Hiring Manager,}
+ \opening{Dear Hiring Manager,}
 
-    \begin{center}{\textbf{Position:} \underline{Job Title}}\end{center}
+ \begin{center}{\textbf{Position:} \underline{Job Title}}\end{center}
 
 \setlength{\parskip}{20pt}
 
 \justifying{
-    Opening paragraph: Connect your background to this specific role and company. Reference the job title and 1-2 things that make this role compelling. 3-4 sentences.
+ Opening paragraph: Connect your background to this specific role and company. Reference the job title and 1-2 things that make this role compelling. 3-4 sentences.
 
-    Body paragraph 1: Highlight 2-3 specific accomplishments from the master career document most relevant to this role. Use concrete details. 3-4 sentences.
+ Body paragraph 1: Highlight 2-3 specific accomplishments from the master career document most relevant to this role. Use concrete details. 3-4 sentences.
 
-    Body paragraph 2: Address a specific requirement or challenge from the job description. Connect your experience directly to it. 3-4 sentences.
+ Body paragraph 2: Address a specific requirement or challenge from the job description. Connect your experience directly to it. 3-4 sentences.
 
-    Closing paragraph: Express genuine interest, reference next steps, thank them for consideration. 2-3 sentences.
+ Closing paragraph: Express genuine interest, reference next steps, thank them for consideration. 2-3 sentences.
 }
 \end{letter}
 \end{minipage}
