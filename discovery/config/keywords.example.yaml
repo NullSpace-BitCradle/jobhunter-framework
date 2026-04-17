@@ -109,3 +109,12 @@ scoring:
     tier_2: 4
     tier_3: 2
     board_match: 3              # Jobs found via job boards (LinkedIn, Indeed, etc.)
+
+  # Optional: work-mode preference (remote > hybrid > on-site).
+  # Classification precedence: 'hybrid' in location string wins, else remote
+  # flag or 'remote' in location, else on_site. Omit this section to disable
+  # work-mode scoring entirely.
+  # location_mode_bonus:
+  #   remote: 5
+  #   hybrid: 2
+  #   on_site: 0

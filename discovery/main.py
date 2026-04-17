@@ -371,6 +371,21 @@ def is_anti_target(job: Job, filters: dict) -> tuple[bool, str]:
     return False, ""
 
 
+def classify_work_mode(job: Job) -> str:
+    """Classify a job's work mode as 'remote', 'hybrid', or 'on_site'.
+
+    Precedence: 'hybrid' in location string wins first (so 'Remote - Hybrid'
+    is treated as hybrid, the less-generous classification). Then remote flag
+    or 'remote' in location. Else on_site.
+    """
+    loc_lower = (job.location or "").lower()
+    if "hybrid" in loc_lower:
+        return "hybrid"
+    if job.remote is True or "remote" in loc_lower:
+        return "remote"
+    return "on_site"
+
+
 def score_job(job: Job, scoring: dict) -> int:
     score = 0
     title_lower = job.title.lower()
@@ -400,6 +415,13 @@ def score_job(job: Job, scoring: dict) -> int:
         if name.lower() in company_lower:
             score += bonus
             break
+
+    # Work-mode preference: remote > hybrid > on_site. Applied only when the
+    # scoring config declares location_mode_bonus so pre-existing configs
+    # without this section keep their current scoring behavior unchanged.
+    mode_bonus = scoring.get("location_mode_bonus") or {}
+    if mode_bonus:
+        score += mode_bonus.get(classify_work_mode(job), 0)
 
     # Freshness bonus - newer postings score higher
     if job.posted_at:

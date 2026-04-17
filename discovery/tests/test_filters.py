@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 
-from main import match_title, match_location, is_anti_target, score_job
+from main import match_title, match_location, is_anti_target, score_job, classify_work_mode
 from scrapers.base import Job
 
 
@@ -264,3 +264,56 @@ class TestScoreJob:
 
     def test_empty_scoring_dict(self):
         assert score_job(_job(), {}) >= 0
+
+    def test_location_mode_bonus_remote(self):
+        scoring = {"location_mode_bonus": {"remote": 5, "hybrid": 2, "on_site": 0}}
+        job = _job(remote=True, location="Remote, USA", posted_at=None)
+        assert score_job(job, scoring) == 5
+
+    def test_location_mode_bonus_hybrid(self):
+        scoring = {"location_mode_bonus": {"remote": 5, "hybrid": 2, "on_site": 0}}
+        job = _job(remote=False, location="Springfield, IL (Hybrid)", posted_at=None)
+        assert score_job(job, scoring) == 2
+
+    def test_location_mode_bonus_on_site(self):
+        scoring = {"location_mode_bonus": {"remote": 5, "hybrid": 2, "on_site": 0}}
+        job = _job(remote=False, location="Springfield, IL", posted_at=None)
+        assert score_job(job, scoring) == 0
+
+    def test_location_mode_bonus_section_absent_is_neutral(self):
+        """Scoring configs without location_mode_bonus should behave as before."""
+        scoring = {"title_bonus": {"engineer": 3}}
+        job = _job(remote=True, title="Senior Engineer", posted_at=None)
+        # 3 (title bonus for 'engineer'), no location bonus since section absent
+        assert score_job(job, scoring) == 3
+
+
+class TestClassifyWorkMode:
+    def _j(self, remote, location):
+        return Job(
+            id="x:1", company="C", company_slug="c", company_tier="tier_1_saas",
+            title="Engineer", location=location, remote=remote, url="u",
+            posted_at=None, description_text="", source="ats",
+        )
+
+    def test_explicit_remote_flag(self):
+        assert classify_work_mode(self._j(True, "")) == "remote"
+
+    def test_remote_in_location(self):
+        assert classify_work_mode(self._j(None, "Remote, USA")) == "remote"
+
+    def test_hybrid_beats_remote_when_both_present(self):
+        """Cautious classification: 'Remote - Hybrid' counts as hybrid."""
+        assert classify_work_mode(self._j(True, "Remote - Hybrid")) == "hybrid"
+
+    def test_hybrid_in_location(self):
+        assert classify_work_mode(self._j(False, "Springfield, IL (Hybrid)")) == "hybrid"
+
+    def test_on_site(self):
+        assert classify_work_mode(self._j(False, "Springfield, IL")) == "on_site"
+
+    def test_empty_location_not_remote_flag(self):
+        assert classify_work_mode(self._j(False, "")) == "on_site"
+
+    def test_empty_location_none_remote(self):
+        assert classify_work_mode(self._j(None, None)) == "on_site"
