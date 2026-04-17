@@ -104,7 +104,7 @@ Check the JD against the "Anti-Target Lanes" section in the MCD's `Notes for Res
 - Production Kubernetes / SRE / Platform Engineering role requiring in-production K8s operations at scale
 - Role requiring active certifications (CISSP, CCSP, CISM, CCSK, AWS/Azure/GCP Security) as **hard** requirements
 - Role requiring a Bachelor's degree as a **hard** requirement (not "preferred" or "equivalent experience")
-- On-site or required-hybrid role (remote is a hard constraint)
+- On-site or required-hybrid role OUTSIDE the East Valley commute radius (Chandler / Gilbert / Tempe / Mesa / Scottsdale, AZ). Remote is the strong default; on-site or hybrid in those five cities is acceptable when the role is otherwise a strong lane fit.
 - Security Analyst / SOC Analyst / Tier 1-2 / Junior Engineer role (severely underleveled)
 - Pure IT Infrastructure / Systems Administrator role with no security component
 
