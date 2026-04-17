@@ -104,7 +104,7 @@ scoring:
   # Bonus for company tier (from companies.yaml)
   tier_bonus:
     tier_1_saas: 10
-    tier_1_security_vendor: 15  # Highest — direct-hook opportunity at VM vendors
+    tier_1_security_vendor: 15  # Highest - direct-hook opportunity at VM vendors
     tier_1_consulting: 8
     tier_2: 4
     tier_3: 2
