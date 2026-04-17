@@ -18,11 +18,14 @@ __pycache__/
 /discovery/state/
 /discovery/output/
 
-# Personal career content — never commit
+# Personal career content - never commit
 Master_Career_Document*.md
 Job_Description-*.md
 applications.md
 /output/
+
+# Session-specific PRDs and review docs (per-application work dirs)
+MEMORY/
 *.pdf
 *.aux
 *.log
