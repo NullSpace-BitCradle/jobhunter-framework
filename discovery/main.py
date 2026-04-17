@@ -955,8 +955,9 @@ def parse_digest_matches(path: Path, digest_date: date) -> list[dict]:
             finalize(current_job)
             header = h3.group(1).strip()
             source_tag = "board" if h3.group(2) else "ats"
-            # Split on first " - ", " — ", or " – " (covers historical digests
-            # from before the dash cleanup that used em/en-dash separators).
+            # Split on first hyphen, em-dash (U+2014), or en-dash (U+2013)
+            # surrounded by whitespace. Covers historical digests from before
+            # the dash cleanup that used em-dash separators in headers.
             parts = re.split(r"\s+[-\u2014\u2013]\s+", header, maxsplit=1)
             if len(parts) == 2:
                 company, title = parts[0].strip(), parts[1].strip()
