@@ -1,24 +1,13 @@
 """Lever public postings API scraper. Endpoint: api.lever.co/v0/postings/<slug>?mode=json"""
-import html
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Optional
 
 import requests
 
-from .base import Scraper, Job
+from .base import Scraper, Job, strip_html
 
 logger = logging.getLogger(__name__)
-
-
-def _strip_html(s: str) -> str:
-    if not s:
-        return ""
-    s = re.sub(r"<[^>]+>", " ", s)
-    s = html.unescape(s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
 
 
 class LeverScraper(Scraper):
@@ -28,13 +17,13 @@ class LeverScraper(Scraper):
     def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:
         url = self.BASE_URL.format(slug=company_slug)
         try:
-            resp = requests.get(url, params={"mode": "json"}, timeout=self.timeout)
+            resp = self._throttled_get(url, params={"mode": "json"}, timeout=self.timeout)
         except requests.RequestException as e:
             logger.warning("%s: request failed: %s", company_name, e)
             return []
 
         if resp.status_code == 404:
-            logger.warning("%s: Lever board not found at slug '%s' — verify the slug", company_name, company_slug)
+            logger.warning("%s: Lever board not found at slug '%s' - verify the slug", company_name, company_slug)
             return []
         if not resp.ok:
             logger.warning("%s: Lever API returned %s", company_name, resp.status_code)
@@ -68,7 +57,7 @@ class LeverScraper(Scraper):
                     posted_at = datetime.fromtimestamp(created_at_ms / 1000.0, tz=timezone.utc)
                 except (OverflowError, OSError, ValueError):
                     posted_at = None
-            description = j.get("descriptionPlain") or _strip_html(j.get("description") or "")
+            description = j.get("descriptionPlain") or strip_html(j.get("description") or "")
 
             remote: Optional[bool] = None
             if workplace_type == "remote":

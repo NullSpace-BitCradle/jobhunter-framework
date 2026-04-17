@@ -5,37 +5,16 @@ Endpoint: https://apply.workable.com/api/v1/widget/accounts/<slug>?details=true
 Note: Workable's widget endpoint returns HTTP 200 with `jobs: []` for unknown
 company slugs, so 404 detection relies on checking the jobs array. Verify via
 dry-run that any company added here actually has listings. Description data
-from the widget endpoint is limited — title matching is the primary signal.
+from the widget endpoint is limited - title matching is the primary signal.
 """
-import html
 import logging
-import re
-from datetime import datetime
 from typing import Optional
 
 import requests
 
-from .base import Scraper, Job
+from .base import Scraper, Job, strip_html, parse_iso
 
 logger = logging.getLogger(__name__)
-
-
-def _strip_html(s: str) -> str:
-    if not s:
-        return ""
-    s = re.sub(r"<[^>]+>", " ", s)
-    s = html.unescape(s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
-
-def _parse_iso(s: Optional[str]) -> Optional[datetime]:
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except Exception:
-        return None
 
 
 class WorkableScraper(Scraper):
@@ -45,13 +24,13 @@ class WorkableScraper(Scraper):
     def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:
         url = self.BASE_URL.format(slug=company_slug)
         try:
-            resp = requests.get(url, params={"details": "true"}, timeout=self.timeout)
+            resp = self._throttled_get(url, params={"details": "true"}, timeout=self.timeout)
         except requests.RequestException as e:
             logger.warning("%s: request failed: %s", company_name, e)
             return []
 
         if resp.status_code == 404:
-            logger.warning("%s: Workable account not found at slug '%s' — verify the slug", company_name, company_slug)
+            logger.warning("%s: Workable account not found at slug '%s' - verify the slug", company_name, company_slug)
             return []
         if not resp.ok:
             logger.warning("%s: Workable API returned %s", company_name, resp.status_code)
@@ -65,7 +44,7 @@ class WorkableScraper(Scraper):
 
         jobs_raw = data.get("jobs") or []
         if not jobs_raw:
-            logger.info("%s: Workable returned 0 jobs (account exists but no listings, or slug wrong)", company_name)
+            logger.warning("%s: Workable returned 0 jobs - verify slug '%s'", company_name, company_slug)
             return []
 
         jobs: list[Job] = []
@@ -75,7 +54,6 @@ class WorkableScraper(Scraper):
                 continue
             title = (j.get("title") or "").strip()
 
-            # Location composition
             location_parts = []
             if j.get("city"):
                 location_parts.append(j["city"])
@@ -89,8 +67,8 @@ class WorkableScraper(Scraper):
             if not apply_url and j.get("shortcode"):
                 apply_url = f"https://apply.workable.com/{company_slug}/j/{j['shortcode']}/"
 
-            posted_at = _parse_iso(j.get("created_at") or j.get("published_on"))
-            description = _strip_html(j.get("description") or "")
+            posted_at = parse_iso(j.get("created_at") or j.get("published_on"))
+            description = strip_html(j.get("description") or "")
 
             remote: Optional[bool] = None
             if isinstance(j.get("telecommuting"), bool):

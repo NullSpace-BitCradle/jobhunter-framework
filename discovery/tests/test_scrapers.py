@@ -1,7 +1,7 @@
 """Unit tests for ATS scrapers. Mocks HTTP responses to test field mapping and error handling."""
 import json
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 
 import pytest
 
@@ -31,6 +31,13 @@ def _mock_response(status_code=200, json_data=None, text="", raise_exc=None):
     resp.json.return_value = json_data
     resp.text = text
     return resp
+
+
+def _patch_session(scraper, return_value=None, side_effect=None):
+    """Patch a scraper's _throttled_get method."""
+    return patch.object(scraper, "_throttled_get",
+                        return_value=return_value,
+                        side_effect=side_effect)
 
 
 COMPANY = ("testco", "Test Company", "tier_1_saas")
@@ -65,7 +72,7 @@ GREENHOUSE_RESPONSE = {
 class TestGreenhouseScraper:
     def test_happy_path(self):
         scraper = GreenhouseScraper()
-        with patch("scrapers.greenhouse.requests.get", return_value=_mock_response(json_data=GREENHOUSE_RESPONSE)):
+        with _patch_session(scraper, return_value=_mock_response(json_data=GREENHOUSE_RESPONSE)):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert len(jobs) == 2
         j = jobs[0]
@@ -81,19 +88,19 @@ class TestGreenhouseScraper:
 
     def test_404(self):
         scraper = GreenhouseScraper()
-        with patch("scrapers.greenhouse.requests.get", return_value=_mock_response(404)):
+        with _patch_session(scraper, return_value=_mock_response(404)):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert jobs == []
 
     def test_timeout(self):
         scraper = GreenhouseScraper()
-        with patch("scrapers.greenhouse.requests.get", side_effect=requests.Timeout("timed out")):
+        with _patch_session(scraper, side_effect=requests.Timeout("timed out")):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert jobs == []
 
     def test_empty_board(self):
         scraper = GreenhouseScraper()
-        with patch("scrapers.greenhouse.requests.get", return_value=_mock_response(json_data={"jobs": []})):
+        with _patch_session(scraper, return_value=_mock_response(json_data={"jobs": []})):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert jobs == []
 
@@ -118,7 +125,7 @@ LEVER_RESPONSE = [
 class TestLeverScraper:
     def test_happy_path(self):
         scraper = LeverScraper()
-        with patch("scrapers.lever.requests.get", return_value=_mock_response(json_data=LEVER_RESPONSE)):
+        with _patch_session(scraper, return_value=_mock_response(json_data=LEVER_RESPONSE)):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert len(jobs) == 1
         j = jobs[0]
@@ -129,12 +136,12 @@ class TestLeverScraper:
 
     def test_404(self):
         scraper = LeverScraper()
-        with patch("scrapers.lever.requests.get", return_value=_mock_response(404)):
+        with _patch_session(scraper, return_value=_mock_response(404)):
             assert scraper.fetch_jobs(*COMPANY) == []
 
     def test_unexpected_shape(self):
         scraper = LeverScraper()
-        with patch("scrapers.lever.requests.get", return_value=_mock_response(json_data={"error": "bad"})):
+        with _patch_session(scraper, return_value=_mock_response(json_data={"error": "bad"})):
             assert scraper.fetch_jobs(*COMPANY) == []
 
 
@@ -160,7 +167,7 @@ ASHBY_RESPONSE = {
 class TestAshbyScraper:
     def test_happy_path(self):
         scraper = AshbyScraper()
-        with patch("scrapers.ashby.requests.get", return_value=_mock_response(json_data=ASHBY_RESPONSE)):
+        with _patch_session(scraper, return_value=_mock_response(json_data=ASHBY_RESPONSE)):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert len(jobs) == 1
         j = jobs[0]
@@ -171,7 +178,7 @@ class TestAshbyScraper:
 
     def test_timeout(self):
         scraper = AshbyScraper()
-        with patch("scrapers.ashby.requests.get", side_effect=requests.ReadTimeout("read timed out")):
+        with _patch_session(scraper, side_effect=requests.ReadTimeout("read timed out")):
             assert scraper.fetch_jobs(*COMPANY) == []
 
 
@@ -196,7 +203,7 @@ SMARTRECRUITERS_RESPONSE = {
 class TestSmartRecruitersScraper:
     def test_happy_path(self):
         scraper = SmartRecruitersScraper()
-        with patch("scrapers.smartrecruiters.requests.get", return_value=_mock_response(json_data=SMARTRECRUITERS_RESPONSE)):
+        with _patch_session(scraper, return_value=_mock_response(json_data=SMARTRECRUITERS_RESPONSE)):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert len(jobs) == 1
         j = jobs[0]
@@ -209,7 +216,7 @@ class TestSmartRecruitersScraper:
 
     def test_empty_slug(self):
         scraper = SmartRecruitersScraper()
-        with patch("scrapers.smartrecruiters.requests.get", return_value=_mock_response(json_data={"totalFound": 0, "content": []})):
+        with _patch_session(scraper, return_value=_mock_response(json_data={"totalFound": 0, "content": []})):
             assert scraper.fetch_jobs(*COMPANY) == []
 
 
@@ -238,7 +245,7 @@ WORKABLE_RESPONSE = {
 class TestWorkableScraper:
     def test_happy_path(self):
         scraper = WorkableScraper()
-        with patch("scrapers.workable.requests.get", return_value=_mock_response(json_data=WORKABLE_RESPONSE)):
+        with _patch_session(scraper, return_value=_mock_response(json_data=WORKABLE_RESPONSE)):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert len(jobs) == 1
         j = jobs[0]
@@ -250,10 +257,10 @@ class TestWorkableScraper:
 
     def test_empty_jobs(self):
         scraper = WorkableScraper()
-        with patch("scrapers.workable.requests.get", return_value=_mock_response(json_data={"jobs": []})):
+        with _patch_session(scraper, return_value=_mock_response(json_data={"jobs": []})):
             assert scraper.fetch_jobs(*COMPANY) == []
 
     def test_connection_error(self):
         scraper = WorkableScraper()
-        with patch("scrapers.workable.requests.get", side_effect=requests.ConnectionError("refused")):
+        with _patch_session(scraper, side_effect=requests.ConnectionError("refused")):
             assert scraper.fetch_jobs(*COMPANY) == []

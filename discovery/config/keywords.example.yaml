@@ -66,6 +66,25 @@ match_rules:
   # Leave this commented out to allow any remote role through.
   required_location_regex: '\b(united states|usa|u\.?s\.?a?\.?|americas|north america)\b|(?:^|[,\s\-/])us(?=$|[,\s\-/])'
 
+# JobSpy: job-board aggregator search (LinkedIn, Indeed, Glassdoor, etc.)
+# Runs alongside the ATS scrapers to catch postings not on direct company boards.
+# Cross-source dedup ensures the same role isn't listed twice.
+jobspy:
+  enabled: true
+  sites:
+    - linkedin
+    # - indeed
+    # - glassdoor
+    # - google
+    # - zip_recruiter
+  # search_term: override auto-generated term (built from domain_keywords if omitted)
+  # search_term: '"vulnerability management" OR "security architect" OR "security engineer"'
+  location: "USA"
+  results_wanted: 50
+  hours_old: 72                     # Only postings from the last N hours
+  linkedin_fetch_description: false # Set true for full descriptions (slower)
+  # country_indeed: "USA"           # Indeed country filter
+
 # Scoring: higher score = higher priority in the digest
 scoring:
   # Bonus for specific substrings in title
@@ -89,3 +108,4 @@ scoring:
     tier_1_consulting: 8
     tier_2: 4
     tier_3: 2
+    board_match: 3              # Jobs found via job boards (LinkedIn, Indeed, etc.)

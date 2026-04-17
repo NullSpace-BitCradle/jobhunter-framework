@@ -1,33 +1,12 @@
 """Greenhouse public jobs API scraper. Endpoint: boards-api.greenhouse.io/v1/boards/<slug>/jobs"""
-import html
 import logging
-import re
-from datetime import datetime
 from typing import Optional
 
 import requests
 
-from .base import Scraper, Job
+from .base import Scraper, Job, strip_html, parse_iso
 
 logger = logging.getLogger(__name__)
-
-
-def _strip_html(s: str) -> str:
-    if not s:
-        return ""
-    s = re.sub(r"<[^>]+>", " ", s)
-    s = html.unescape(s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
-
-def _parse_iso(s: Optional[str]) -> Optional[datetime]:
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except Exception:
-        return None
 
 
 class GreenhouseScraper(Scraper):
@@ -37,13 +16,13 @@ class GreenhouseScraper(Scraper):
     def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:
         url = self.BASE_URL.format(slug=company_slug)
         try:
-            resp = requests.get(url, params={"content": "true"}, timeout=self.timeout)
+            resp = self._throttled_get(url, params={"content": "true"}, timeout=self.timeout)
         except requests.RequestException as e:
             logger.warning("%s: request failed: %s", company_name, e)
             return []
 
         if resp.status_code == 404:
-            logger.warning("%s: Greenhouse board not found at slug '%s' — verify the slug", company_name, company_slug)
+            logger.warning("%s: Greenhouse board not found at slug '%s' - verify the slug", company_name, company_slug)
             return []
         if not resp.ok:
             logger.warning("%s: Greenhouse API returned %s", company_name, resp.status_code)
@@ -64,8 +43,8 @@ class GreenhouseScraper(Scraper):
             title = (j.get("title") or "").strip()
             location = ((j.get("location") or {}).get("name") or "").strip()
             url_apply = j.get("absolute_url", "")
-            posted_at = _parse_iso(j.get("updated_at") or j.get("first_published"))
-            description = _strip_html(j.get("content", ""))
+            posted_at = parse_iso(j.get("updated_at") or j.get("first_published_at") or j.get("created_at"))
+            description = strip_html(j.get("content", ""))
 
             remote: Optional[bool] = None
             loc_lower = location.lower()
