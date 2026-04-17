@@ -1,5 +1,6 @@
 ---
 description: Regenerate discovery anti-target filters from MCD Anti-Target Lanes section
+argument-hint: [--check]
 ---
 
 # /sync-filters - MCD → filters.yaml auto-sync
@@ -7,6 +8,37 @@ description: Regenerate discovery anti-target filters from MCD Anti-Target Lanes
 Reads the Anti-Target Lanes section from the Master Career Document and generates (or updates) the discovery `filters.yaml` so the two can never drift.
 
 Run this after editing the MCD's Anti-Target Lanes section, or periodically to catch drift.
+
+User arguments (if any): `$ARGUMENTS`
+
+## Argument parsing
+
+If `$ARGUMENTS` contains `--check`, run in **drift-detection mode**:
+
+- Perform Steps 1 through 4 as usual (read MCD, read current filters, determine what would change).
+- **Stop before Step 5.** Do not show the full generated YAML and do not prompt to write.
+- Report only a compact summary:
+  - Count of MCD anti-targets with no corresponding filter pattern (drift in)
+  - Count of filter patterns with no corresponding MCD anti-target (orphaned)
+  - Count of MCD anti-targets whose filter pattern would be updated (new match strings proposed)
+  - List the names of each, one per line under the appropriate header
+
+Example `--check` output:
+
+```
+Drift check against ~/JobHunt/Master_Career_Document.md
+  New patterns needed (2):
+    - cleared_contractor_hard_required (from "Active clearance required" anti-target)
+    - mdr_mssp_staff (from "MSSP/MDR staff analyst" anti-target)
+  Orphaned patterns (1):
+    - director_plus_security_mgmt (no corresponding MCD anti-target)
+  Patterns with proposed updates (1):
+    - cert_hard_required (2 new description_contains_any entries proposed)
+
+Run /sync-filters without --check to review and apply changes.
+```
+
+If no flags are passed, run full sync as described below.
 
 ## Step 1 - Load config
 

@@ -70,6 +70,17 @@ Invoke the **ats-resume-writer** agent pointing at the newly-saved JD file. Let 
 Output files land in `<output_dir>` following the naming convention:
 `Resume-<Name>-<Company>-<Role>.{tex,pdf}` and `CoverLetter-<Name>-<Company>-<Role>.{tex,pdf}`.
 
+## Step 3.5 - Duplicate check
+
+Before logging, scan the existing `<applications_file>` for any row whose URL column matches the source URL (strip markdown auto-link wrappers `<url>` and `[text](url)` when comparing). Also match on exact `Company + Role` even if the URL differs, since the same role can be re-posted at a new URL.
+
+If a duplicate is found:
+
+- If the existing row's Status is `queued` or `applied` or downstream (`ack`/`screen`/`interview`/`offer`): **stop and surface the match**. Show the user: "Already in tracker as `<status>` from `<date>` (row <N>). Apply again anyway?" Do not proceed without explicit confirmation. On confirm, proceed to Step 4 and append a new row (do not edit the existing row).
+- If the existing row's Status is terminal (`rejected`, `withdrew`, `declined_anti_target`): surface the prior status and reason, then ask: "Previously `<status>`: `<reason>`. Still want to apply?" On confirm, proceed.
+
+If no duplicate is found, proceed straight to Step 4.
+
 ## Step 4 - Log the application
 
 Read `<applications_file>`. If it does not exist, create it by copying `applications.template.md` from the framework repo root, then proceed.

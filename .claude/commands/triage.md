@@ -1,5 +1,6 @@
 ---
 description: Triage the job-hunt inbox - classify mail, update tracker, schedule interviews
+argument-hint: [--limit N] [--days N]
 ---
 
 # /triage - Daily job-search inbox triage
@@ -7,6 +8,17 @@ description: Triage the job-hunt inbox - classify mail, update tracker, schedule
 Classify recent mail in the job-hunt Gmail account, cross-reference against the applications tracker, and surface anything that needs the user's attention. Interviews with proposed times get scheduled on Google Calendar automatically; everything else is read-only classification.
 
 Previewing an email in Gmail shouldn't cause /triage to miss it, so the query does not filter on read/unread - tracker-state dedup handles repeat runs.
+
+User arguments (if any): `$ARGUMENTS`
+
+## Argument parsing
+
+Before Step 0, parse `$ARGUMENTS` for optional flags:
+
+- `--limit N` - override the default message fetch limit (default: 25). Useful after a weekend or a long gap where more than 25 messages may have landed.
+- `--days N` - override the default lookback window (default: 2 days). `--days 7` catches a full week.
+
+If neither flag is given, use the defaults. Both flags accept positive integers; ignore malformed values and fall back to defaults with a one-line warning to the user.
 
 **Requires:** Gmail plugin and Google Calendar plugin configured for the job-hunt account specified in `config.yaml → gmail.account`.
 
@@ -32,8 +44,8 @@ Read the tracker file now so you have its current state in memory for cross-refe
 ## Step 2 - Fetch recent mail
 
 Use `mcp__claude_ai_Gmail__gmail_search_messages` with:
-- Query: `newer_than:2d -category:promotions -category:social`
-- Limit: 25
+- Query: `newer_than:<days>d -category:promotions -category:social` (default `<days>` is 2, overridable via `--days N`)
+- Limit: `<limit>` (default 25, overridable via `--limit N`)
 
 For each message in the result, read subject + sender + first ~500 chars of body via `mcp__claude_ai_Gmail__gmail_read_message`.
 

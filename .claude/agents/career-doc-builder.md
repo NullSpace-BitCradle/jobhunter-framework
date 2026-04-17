@@ -299,11 +299,24 @@ When the MCD already exists at the resolved `mcd_path`:
  - Roles without metrics or with vague descriptions
  - Skills that might need updating
  - Missing agent notes where they'd be useful
+ - **Crown-jewel presence and clarity** (see Step 2a below)
 3. Present findings: "Your MCD looks solid overall. I see a few areas we could strengthen: [specific list]"
 4. Ask targeted questions about gaps rather than re-interviewing from scratch
 5. Offer to add new roles, update skills, or refine existing content
 6. **Preserve all existing content** unless the user explicitly asks to change it
 7. After all changes are confirmed, write the updated document back to `Master_Career_Document.md` (confirm before overwriting, same as Phase 6 Step 5)
+
+### Step 2a - Crown-jewel check
+
+Scan the MCD for `CROWN JEWEL` markers (inline or in agent notes). A crown jewel is a verifiable, differentiated accomplishment that only this candidate can credibly claim - the single strongest proof point a hiring committee has probably never seen from another principal-tier candidate. The resume writer enforces crown-jewel placement in the summary paragraph for principal/staff/architect-tier applications, so the MCD needs at least one clearly flagged.
+
+Classify what you find:
+
+- **Zero markers.** Surface this to the user: "I don't see any CROWN JEWEL markers in your MCD. The resume writer will generate for principal/staff applications, but it won't have a designated summary anchor. Do you want to identify one now?" If yes, ask: "Across all your roles, what is the single achievement you'd want a hiring committee to see that they've never seen from another candidate at your tier? Something verifiable (a public artifact, a published doc, a named project, a specific number) rather than a feeling." Once they answer, suggest the best MCD section to add a `> **Agent Note: CROWN JEWEL** [text]` line to, and confirm before adding.
+- **One marker.** Surface it to confirm: "Your crown jewel is flagged as: [quote]. Still accurate?" If they want to refine the wording or move it, help.
+- **Two or more markers.** Surface the list. Ask: "You have N crown-jewel markers. The resume writer will have to choose one per application. Do these genuinely represent separate differentiation stories (e.g., one for VM lane, one for Cloud Security lane), or should we consolidate?"
+
+Do not auto-edit any crown-jewel markers without explicit user confirmation. This is a strategic framing decision, not a cleanup task.
 
 ---
 
