@@ -90,7 +90,7 @@ tier_1_saas:
   - name: Netlify
     ats: greenhouse
     slug: netlify
-  # Retool — no public ATS board found as of 2026-04-12; moved to manual_check
+  # Retool - no public ATS board found as of 2026-04-12; moved to manual_check
   - name: PagerDuty
     ats: greenhouse
     slug: pagerduty
@@ -230,109 +230,109 @@ manual_check:
     note: "Likely Workday post-IBM acquisition; Greenhouse board retired"
   - name: Rippling
     careers_url: https://www.rippling.com/careers
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: Rapid7
     careers_url: https://www.rapid7.com/careers/open-positions/
-    note: "Workday (careers.rapid7.com is CloudFront-proxied) — not yet supported"
+    note: "Workday (careers.rapid7.com is CloudFront-proxied) - not yet supported"
   - name: Snyk
     careers_url: https://snyk.io/careers/
-    note: "Unknown ATS — not on any currently-supported public API"
+    note: "Unknown ATS - not on any currently-supported public API"
   - name: Lacework (Fortinet)
     careers_url: https://www.lacework.com/company/careers
-    note: "Workday post-Fortinet acquisition — not yet supported"
+    note: "Workday post-Fortinet acquisition - not yet supported"
   - name: Okta / Auth0
     careers_url: https://www.okta.com/company/careers/
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: CrowdStrike
     careers_url: https://www.crowdstrike.com/careers/
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: Palo Alto Networks
     careers_url: https://www.paloaltonetworks.com/company/careers
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: Qualys
     careers_url: https://www.qualys.com/company/careers/
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: SentinelOne
     careers_url: https://www.sentinelone.com/careers/
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: Zscaler
     careers_url: https://www.zscaler.com/company/careers
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: Netskope
     careers_url: https://www.netskope.com/company/careers
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: NCC Group
     careers_url: https://www.nccgroup.com/us/careers/
-    note: "Workday — not yet supported"
+    note: "Workday - not yet supported"
   - name: Optiv
     careers_url: https://www.optiv.com/careers
-    note: "iCIMS — not yet supported"
+    note: "iCIMS - not yet supported"
   - name: GuidePoint Security
     careers_url: https://www.guidepointsecurity.com/careers/
-    note: "Unknown ATS — check manually"
+    note: "Unknown ATS - check manually"
   - name: Mandiant (Google Cloud Security Consulting)
     careers_url: https://careers.google.com/jobs/results/?company=Google&company=Mandiant
-    note: "Google Careers — not yet supported"
+    note: "Google Careers - not yet supported"
   # Security vendors where slug could not be verified on Greenhouse/Ashby/Lever
   - name: 1Password
     careers_url: https://1password.com/careers
-    note: "Slug not found on public ATS APIs — check manually"
+    note: "Slug not found on public ATS APIs - check manually"
   - name: Red Canary
     careers_url: https://redcanary.com/company/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Sysdig
     careers_url: https://sysdig.com/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Aqua Security
     careers_url: https://www.aquasec.com/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Armis
     careers_url: https://www.armis.com/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: GreyNoise
     careers_url: https://www.greynoise.io/careers
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Cobalt.io
     careers_url: https://cobalt.io/careers
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Endor Labs
     careers_url: https://www.endorlabs.com/careers
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Pentera
     careers_url: https://pentera.io/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Horizon3.ai
     careers_url: https://horizon3.ai/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Illumio
     careers_url: https://www.illumio.com/company/careers
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Vectra AI
     careers_url: https://www.vectra.ai/about/careers
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: ExtraHop
     careers_url: https://www.extrahop.com/company/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   # Consulting boutiques where slug could not be verified
   - name: Trail of Bits
     careers_url: https://www.trailofbits.com/careers
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Doyensec
     careers_url: https://www.doyensec.com/careers.html
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: IOActive
     careers_url: https://ioactive.com/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Include Security
     careers_url: https://www.includesecurity.com/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   - name: Leviathan Security
     careers_url: https://www.leviathansecurity.com/careers/
-    note: "Slug not found — check manually"
+    note: "Slug not found - check manually"
   # Other companies to monitor manually
   - name: JupiterOne
     careers_url: https://www.jupiterone.com/company/careers
     note: "Workable (widget returns only catch-all; no real active listings to scrape)"
   - name: Vulcan Cyber
     careers_url: https://vulcancyber.com/careers
-    note: "Unknown ATS — check manually"
+    note: "Unknown ATS - check manually"
