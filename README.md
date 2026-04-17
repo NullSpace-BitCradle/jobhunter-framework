@@ -271,6 +271,32 @@ Discovery deduplicates at two levels:
 1. **Within-source** - every job gets a unique ID (`{ats}:{slug}:{id}` for ATS, `jobspy:{site}:{hash}` for boards). IDs are tracked in `seen-jobs.json`; jobs seen on prior runs are filtered out. IDs age out after 60 days or when the file hits 50,000 entries, whichever comes first.
 2. **Cross-source** - when the same role appears on both an ATS and a job board, fuzzy matching on normalized company name and title keeps only the ATS version (richer description, direct apply link).
 
+### Candidate company discovery
+
+Board-source matches (LinkedIn/Indeed/Glassdoor) from companies NOT already in your `companies.yaml` get tracked in `candidate-companies.json` alongside the seen-jobs state. Each run:
+
+1. Records the board-source company, title, URL, and match score against a persistent candidate log.
+2. Accumulates match count and cumulative score over time (stale entries pruned after 90 days of inactivity).
+3. Extracts the ATS platform and slug when the JobSpy result's URL, `job_url_direct`, or `company_url` resolves to one of the supported ATS platforms (Greenhouse, Lever, Ashby, SmartRecruiters, Workable).
+4. Surfaces candidates in the digest's **Candidate companies** section once they cross the promotion threshold (default: 3 matches OR cumulative score 30+). The suggestion includes a copy-paste-ready `companies.yaml` entry when the ATS was auto-detected.
+
+Example digest output for a surfaced candidate:
+
+```markdown
+### Foo Labs
+- **Matches:** 4 | **Cumulative score:** 58
+- **First seen:** 2026-04-01 | **Last seen:** 2026-04-17
+- **ATS detected:** `greenhouse`, slug `foolabs`
+  ```yaml
+  - name: Foo Labs
+    ats: greenhouse
+    slug: foolabs
+  ```
+- **Sample roles:** Staff Security Engineer; Principal VM Engineer; Senior Detection Engineer
+```
+
+This converts passive JobSpy scraping into an active feed of companies worth promoting to direct-ATS scraping, with zero manual slug hunting when the URL resolves cleanly. Companies whose LinkedIn posts use Easy Apply (no external URL) still get tracked by match count but need manual ATS identification.
+
 ### Scoring and filtering
 
 Each posting gets a score from configurable title bonuses, description bonuses, tier bonuses, company bonuses, and a freshness bonus (+3 if posted in the last 3 days, +1 in the last 7). Matches below zero get ordered low but still appear in the digest.

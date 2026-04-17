@@ -146,6 +146,16 @@ class JobspyScraper(Scraper):
         # Determine tier - board jobs don't have a tier, use a generic one
         company_tier = "board_match"
 
+        # Preserve supplementary URLs that often contain the company's real ATS
+        # slug. LinkedIn's job_url_direct is the external-apply URL; company_url
+        # variants are careers-page links. Candidate tracking uses these to
+        # auto-detect ATS platform and slug for promotion suggestions.
+        raw = {
+            "job_url_direct": str(row.get("job_url_direct") or ""),
+            "company_url": str(row.get("company_url") or ""),
+            "company_url_direct": str(row.get("company_url_direct") or ""),
+        }
+
         return Job(
             id=job_id,
             company=company,
@@ -158,6 +168,7 @@ class JobspyScraper(Scraper):
             posted_at=posted_at,
             description_text=description,
             source="board",
+            raw=raw,
         )
 
     def fetch_jobs(self, company_slug: str, company_name: str, company_tier: str) -> list[Job]:

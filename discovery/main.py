@@ -27,6 +27,7 @@ from scrapers.smartrecruiters import SmartRecruitersScraper
 from scrapers.workable import WorkableScraper
 from scrapers.jobspy import JobspyScraper
 from dedup import deduplicate_cross_source
+import candidates as candidates_mod
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent      # discovery/
@@ -447,6 +448,40 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_
             lines.append(f"- {count}x {reason}")
         lines.append("")
 
+    candidate_companies = stats.get("candidate_companies") or []
+    if candidate_companies:
+        lines.append("---")
+        lines.append("")
+        lines.append("## Candidate companies (not yet in companies.yaml)")
+        lines.append("")
+        lines.append(
+            "Board-source companies that keep appearing with relevant matches. "
+            "Consider promoting any whose ATS is detected below to the appropriate tier."
+        )
+        lines.append("")
+        for c in candidate_companies:
+            lines.append(f"### {c.get('display_name', c.get('normalized_name', 'unknown'))}")
+            lines.append(f"- **Matches:** {c.get('total_matches', 0)} | **Cumulative score:** {c.get('total_score', 0)}")
+            first = (c.get('first_seen') or '')[:10] or 'unknown'
+            last = (c.get('last_seen') or '')[:10] or 'unknown'
+            lines.append(f"- **First seen:** {first} | **Last seen:** {last}")
+            if c.get('discovered_ats') and c.get('discovered_slug'):
+                lines.append(f"- **ATS detected:** `{c['discovered_ats']}`, slug `{c['discovered_slug']}`")
+                lines.append("  ```yaml")
+                lines.append(f"  - name: {c.get('display_name', '')}")
+                lines.append(f"    ats: {c['discovered_ats']}")
+                lines.append(f"    slug: {c['discovered_slug']}")
+                lines.append("  ```")
+            else:
+                lines.append(
+                    "- **ATS:** not detected (Easy Apply only or custom portal); "
+                    "check the company's careers page manually"
+                )
+            titles = c.get('sample_titles') or []
+            if titles:
+                lines.append(f"- **Sample roles:** {'; '.join(titles[:3])}")
+            lines.append("")
+
     out_path.write_text("\n".join(lines))
     return out_path
 
@@ -583,12 +618,29 @@ def main() -> int:
     deduped.extend(best.values())
     results = deduped
 
+    # Candidate company tracking: aggregate board-source matches over time and
+    # surface promotion suggestions with auto-detected ATS slugs. Load always so
+    # the digest can render current promotable state even on dry runs; update
+    # and persist only on non-dry runs.
+    candidate_file = state_file.parent / "candidate-companies.json"
+    candidates_state = candidates_mod.load_candidates(candidate_file)
+    if not args.dry_run:
+        now_iso_candidates = datetime.now(timezone.utc).isoformat()
+        for score_val, job_val, is_match, _ in results:
+            if not is_match or job_val.source != "board":
+                continue
+            if candidates_mod.is_known_company(job_val.company, companies):
+                continue
+            candidates_mod.update_candidate(candidates_state, job_val, score_val, now_iso_candidates)
+        candidates_mod.save_candidates(candidates_state, candidate_file)
+
     stats = {
         "companies_scanned": total_companies,
         "total_fetched": len(all_jobs),
         "board_fetched": len(board_jobs),
         "new_jobs": len(new_jobs),
         "declined_filtered": declined_filtered,
+        "candidate_companies": candidates_mod.promotable_candidates(candidates_state),
     }
     out_path = write_digest(results, stats, digest_dir)
     print(f"Digest written to: {out_path}")
