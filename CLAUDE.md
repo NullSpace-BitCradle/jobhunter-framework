@@ -23,9 +23,10 @@ Every command and the discovery tool read this file at startup. `config.example.
 ## Slash commands
 
 - **`/discover`** - run a discovery scan and show the top new matches. Wraps the Python scanner and summarizes the resulting digest. Use when the user asks to find new jobs, check for new postings, or run a scan.
+- **`/ingest <urls|file>`** - feed manually-found postings through the same filter / score / candidate-tracking pipeline as /discover. Use when the user finds roles outside the normal discovery surface (LinkedIn browsing, recruiter emails, referrals). Writes a separate ingest digest. Read-only against the applications tracker.
 - **`/apply <url|company>`** - end-to-end pipeline for a single role: fetch the JD, invoke the resume writer, log the application as `queued`. Use when the user asks to apply for a specific role or to "do the whole thing" for a URL or digest entry. The row stays `queued` until the user actually submits via the company portal - `/submitted` or `/triage` (on ack) flips it to `applied` / `ack`.
 - **`/submitted <company>`** - flip a `queued` tracker row to `applied` after the user has hit Submit on the company portal. Use when no ack email is expected or when the user wants the tracker accurate immediately.
-- **`/triage`** - classify recent unread mail in the job-hunt inbox, update the applications tracker, and schedule interviews on the job-hunt calendar. Use when the user asks to check their job-search inbox, triage recruiter mail, or process interview invites.
+- **`/triage`** - classify recent mail in the job-hunt inbox, update the applications tracker, and schedule interviews on the job-hunt calendar. Use when the user asks to check their job-search inbox, triage recruiter mail, or process interview invites.
 - **`/sync-filters`** - regenerate the discovery anti-target filters from the MCD's Anti-Target Lanes section. Use when the user has updated their MCD's anti-targets, or to check for drift between the MCD and the discovery filter config.
 
 ## Workflow
