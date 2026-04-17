@@ -185,10 +185,11 @@ Build the MCD once. Maintain it as a living document. Update it when you take a 
 | Command | Purpose |
 |---|---|
 | `/discover [--verify \| --dry-run \| -v]` | Run a discovery scan, show the top new matches by score. |
+| `/ingest <urls \| file>` | Feed manually-found postings (LinkedIn, recruiter emails, etc.) through the same filter + score + candidate pipeline as discovery. Separate digest, read-only against the tracker. |
 | `/apply <url \| company \| JD path>` | End-to-end: fetch JD, run lane-fit and anti-target checks, tailor resume and cover letter, log application as `queued`. |
 | `/submitted <company> [role hint]` | Flip a `queued` row to `applied` after you submit via the company portal. |
-| `/triage` | Classify recent mail in the job-hunt inbox, update tracker status forward along the state machine, schedule interviews on calendar. |
-| `/sync-filters` | Regenerate `discovery/config/filters.yaml` from the MCD's Anti-Target Lanes section. Preserves any hand-tuned match strings. |
+| `/triage [--limit N] [--days N]` | Classify recent mail in the job-hunt inbox, update tracker status forward along the state machine, schedule interviews on calendar. |
+| `/sync-filters [--check]` | Regenerate `discovery/config/filters.yaml` from the MCD's Anti-Target Lanes section (or check drift only). |
 
 `/apply` surfaces warnings before generating:
 
@@ -296,6 +297,24 @@ Example digest output for a surfaced candidate:
 ```
 
 This converts passive JobSpy scraping into an active feed of companies worth promoting to direct-ATS scraping, with zero manual slug hunting when the URL resolves cleanly. Companies whose LinkedIn posts use Easy Apply (no external URL) still get tracked by match count but need manual ATS identification.
+
+### Manual ingest
+
+Not every relevant role comes through discovery. When you find one manually (LinkedIn browsing, recruiter email, referrals, a company's careers page), `/ingest` feeds it through the same pipeline so you get a consistent signal before committing tailoring effort:
+
+```
+/ingest https://www.linkedin.com/jobs/view/4401234567
+/ingest linkedin-urls.txt
+```
+
+Behavior:
+
+- WebFetches each URL and parses title, company, location, posted date, and description. LinkedIn 403s fall back to pasting the JD body text.
+- Runs each posting through `is_anti_target`, `match_title`, `match_location`, and `score_job` - identical to the scan pipeline.
+- Writes a timestamped `ingest-YYYY-MM-DD-HHMMSS.md` digest with four sections: matches, anti-target hits, filtered (with rejection reason so you know WHY a role got rejected, unlike scan mode which silently drops them), and previously-declined warnings (URLs your tracker marks as rejected/withdrew).
+- Feeds candidate-company tracking - manual ingests count toward promotion the same as JobSpy results.
+- **Does NOT** populate `seen-jobs.json` - re-ingesting the same URL re-processes it, useful when a JD has been updated.
+- **Does NOT** modify `applications.md` - read-only against the tracker. Follow up with `/apply <url>` to actually commit.
 
 ### Scoring and filtering
 

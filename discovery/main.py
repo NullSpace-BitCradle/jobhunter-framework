@@ -3,13 +3,15 @@
 Job Discovery Agent - scans target company ATS APIs for new relevant roles.
 
 Usage:
-    python main.py                 # Full scan, writes digest + updates state
-    python main.py --dry-run       # Scan without updating state
-    python main.py --verify        # Verify configured company slugs return results
-    python main.py -v              # Verbose logging
+    python main.py                    # Full scan, writes digest + updates state
+    python main.py --dry-run          # Scan without updating state
+    python main.py --verify           # Verify configured company slugs return results
+    python main.py --ingest <file>    # Process manually-supplied postings through the filter pipeline
+    python main.py -v                 # Verbose logging
 """
 import argparse
 import fcntl
+import hashlib
 import json
 import logging
 import re
@@ -26,7 +28,7 @@ from scrapers.ashby import AshbyScraper
 from scrapers.smartrecruiters import SmartRecruitersScraper
 from scrapers.workable import WorkableScraper
 from scrapers.jobspy import JobspyScraper
-from dedup import deduplicate_cross_source
+from dedup import deduplicate_cross_source, normalize_company
 import candidates as candidates_mod
 
 
@@ -346,6 +348,54 @@ def normalize_title(title: str) -> str:
     return first.strip().lower()
 
 
+def explain_match_rejection(job: Job, rules: dict) -> str | None:
+    """Return a short string describing why a job fails match_title/match_location,
+    or None if it would pass. Used by ingest mode to explain filtered rows -
+    in a scan, these get silently dropped; in an ingest, the user explicitly
+    submitted each URL and wants to know why anything was rejected.
+    """
+    title_lower = (job.title or "").lower()
+    if not title_lower:
+        return "empty title"
+
+    tier_kw = rules.get("tier_keywords_in_title", [])
+    if tier_kw and not any(k in title_lower for k in tier_kw):
+        return f"title missing a tier keyword ({', '.join(tier_kw[:5])}{'...' if len(tier_kw) > 5 else ''})"
+
+    domain_kw = rules.get("domain_keywords_in_title", [])
+    if domain_kw and not any(k in title_lower for k in domain_kw):
+        return f"title missing a domain keyword ({', '.join(domain_kw[:5])}{'...' if len(domain_kw) > 5 else ''})"
+
+    exclusions = rules.get("title_exclusions", [])
+    for ex in exclusions:
+        if ex in title_lower:
+            return f"title contains excluded keyword '{ex}'"
+
+    if rules.get("require_remote", False):
+        loc_lower = (job.location or "").lower()
+        is_remote = job.remote is True or "remote" in loc_lower
+        if not is_remote:
+            local_pattern = rules.get("local_location_regex")
+            if local_pattern:
+                try:
+                    if not re.search(local_pattern, loc_lower, re.IGNORECASE):
+                        return "not remote and location doesn't match local allow regex"
+                except re.error:
+                    pass
+            else:
+                return "not remote (and require_remote is true)"
+
+        pattern = rules.get("required_location_regex")
+        if pattern:
+            try:
+                if not re.search(pattern, loc_lower, re.IGNORECASE):
+                    return "location doesn't match required_location_regex (not US-remote?)"
+            except re.error:
+                pass
+
+    return None
+
+
 def iter_company_entries(companies: dict):
     """Yield (tier_name, entry) for every company in tiers we know how to scrape."""
     for tier_name, entries in companies.items():
@@ -486,10 +536,308 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_
     return out_path
 
 
+def _build_manual_jobs(postings: list[dict]) -> tuple[list[Job], list[dict]]:
+    """Convert raw ingest JSON entries into Job objects. Returns (jobs, skipped).
+
+    skipped is a list of {'entry': dict, 'reason': str} for entries that couldn't
+    be parsed (missing required fields, bad dates, etc.).
+    """
+    jobs: list[Job] = []
+    skipped: list[dict] = []
+    now = datetime.now(timezone.utc).isoformat()
+    for p in postings:
+        if not isinstance(p, dict):
+            skipped.append({"entry": p, "reason": "not a JSON object"})
+            continue
+        url = (p.get("url") or "").strip()
+        title = (p.get("title") or "").strip()
+        company = (p.get("company") or "").strip()
+        if not url:
+            skipped.append({"entry": p, "reason": "missing url"})
+            continue
+        if not title:
+            skipped.append({"entry": p, "reason": "missing title"})
+            continue
+        if not company:
+            skipped.append({"entry": p, "reason": "missing company"})
+            continue
+
+        url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
+        posted_at: datetime | None = None
+        raw_date = p.get("posted_at")
+        if raw_date:
+            try:
+                parsed = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+                posted_at = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                pass  # ignore unparseable dates rather than skip the whole entry
+
+        location = (p.get("location") or "").strip()
+        loc_lower = location.lower()
+        remote: bool | None = None
+        if p.get("remote") is not None:
+            remote = bool(p["remote"])
+        elif "remote" in loc_lower:
+            remote = True
+
+        jobs.append(Job(
+            id=f"manual:{url_hash}",
+            company=company,
+            company_slug=company.lower().replace(" ", "-"),
+            company_tier="manual_ingest",
+            title=title,
+            location=location,
+            remote=remote,
+            url=url,
+            posted_at=posted_at,
+            description_text=(p.get("description") or "").strip(),
+            source="manual",
+            raw={"ingested_at": now},
+        ))
+    return jobs, skipped
+
+
+def write_ingest_digest(
+    results: list[tuple[int, Job, bool, str, str]],
+    skipped: list[dict],
+    declined_hits: list[Job],
+    new_candidates: list[dict],
+    digest_dir: Path,
+) -> Path:
+    """Write a manual-ingest digest with richer explanation than write_digest.
+
+    results: list of (score, job, is_match, anti_target_reason, filter_reason).
+        is_match=True                        -> matched job (filter_reason="")
+        is_match=False, anti_target_reason!="" -> anti-target hit
+        is_match=False, filter_reason!=""     -> filtered by match_rules; reason explains which
+    """
+    now = datetime.now(timezone.utc)
+    today_str = now.date().isoformat()
+    stamp = now.strftime("%H%M%S")
+    digest_dir.mkdir(parents=True, exist_ok=True)
+    out_path = digest_dir / f"ingest-{today_str}-{stamp}.md"
+
+    matches = sorted([x for x in results if x[2]], key=lambda x: -x[0])
+    anti_hits = [x for x in results if not x[2] and x[3]]
+    filtered = [x for x in results if not x[2] and not x[3] and x[4]]
+
+    lines: list[str] = []
+    lines.append(f"# Manual Ingest Digest - {today_str} {stamp[:2]}:{stamp[2:4]}:{stamp[4:6]}")
+    lines.append("")
+    lines.append(f"- **Postings submitted:** {len(results) + len(skipped)}")
+    lines.append(f"- **Parsed and processed:** {len(results)}")
+    if skipped:
+        lines.append(f"- **Skipped (malformed entries):** {len(skipped)}")
+    lines.append(f"- **Matches (post-filter):** {len(matches)}")
+    lines.append(f"- **Anti-target hits:** {len(anti_hits)}")
+    lines.append(f"- **Filtered (no match):** {len(filtered)}")
+    if declined_hits:
+        lines.append(f"- **Previously declined in tracker:** {len(declined_hits)}")
+    if new_candidates:
+        lines.append(f"- **New candidate companies:** {len(new_candidates)}")
+    lines.append("")
+
+    if declined_hits:
+        lines.append("---")
+        lines.append("")
+        lines.append("## Previously declined in tracker")
+        lines.append("")
+        lines.append(
+            "These URLs match rows in your applications tracker with terminal status "
+            "(rejected, withdrew, declined_anti_target). Still processed below - surfaced here so you know."
+        )
+        lines.append("")
+        for j in declined_hits:
+            lines.append(f"- {j.company} - {j.title}")
+            lines.append(f"  - {j.url}")
+        lines.append("")
+
+    if matches:
+        lines.append("---")
+        lines.append("")
+        lines.append("## Matches")
+        lines.append("")
+        for score, job, _, _, _ in matches:
+            lines.append(f"### {job.company} - {job.title}")
+            lines.append(f"- **Score:** {score}")
+            if job.location:
+                lines.append(f"- **Location:** {job.location}")
+            if job.posted_at:
+                lines.append(f"- **Posted:** {job.posted_at.date().isoformat()}")
+            lines.append(f"- **URL:** {job.url}")
+            lines.append("")
+
+    if anti_hits:
+        lines.append("---")
+        lines.append("")
+        lines.append("## Anti-target hits")
+        lines.append("")
+        lines.append("These match patterns in your MCD's Anti-Target Lanes. Not recommended to tailor for these.")
+        lines.append("")
+        for _, job, _, reason, _ in anti_hits:
+            lines.append(f"### {job.company} - {job.title}")
+            lines.append(f"- **Reason:** {reason}")
+            lines.append(f"- **URL:** {job.url}")
+            lines.append("")
+
+    if filtered:
+        lines.append("---")
+        lines.append("")
+        lines.append("## Filtered (no match)")
+        lines.append("")
+        lines.append(
+            "These postings did not match your keyword/location rules. "
+            "Submitted for analysis, rejected by the filter. Useful for calibration."
+        )
+        lines.append("")
+        for _, job, _, _, filter_reason in filtered:
+            lines.append(f"### {job.company} - {job.title}")
+            lines.append(f"- **Rejected by:** {filter_reason}")
+            if job.location:
+                lines.append(f"- **Location:** {job.location}")
+            lines.append(f"- **URL:** {job.url}")
+            lines.append("")
+
+    if new_candidates:
+        lines.append("---")
+        lines.append("")
+        lines.append("## New candidate companies")
+        lines.append("")
+        lines.append(
+            "Manual-ingest rows from companies not in companies.yaml. Tracked for future "
+            "promotion; full candidate list appears in the daily discovery digest."
+        )
+        lines.append("")
+        for c in new_candidates:
+            lines.append(f"- **{c.get('display_name', '')}**"
+                         + (f" (ATS detected: `{c['discovered_ats']}` slug `{c['discovered_slug']}`)"
+                            if c.get('discovered_ats') else ""))
+        lines.append("")
+
+    if skipped:
+        lines.append("---")
+        lines.append("")
+        lines.append("## Skipped (malformed entries)")
+        lines.append("")
+        for s in skipped:
+            entry = s.get("entry")
+            url = ""
+            if isinstance(entry, dict):
+                url = entry.get("url") or ""
+            reason = s.get("reason", "unknown")
+            lines.append(f"- {reason}{' - ' + url if url else ''}")
+        lines.append("")
+
+    out_path.write_text("\n".join(lines))
+    return out_path
+
+
+def run_ingest(
+    postings_path: Path,
+    config_dir: Path,
+    state_file: Path,
+    digest_dir: Path,
+    framework_config: dict,
+    dry_run: bool = False,
+) -> int:
+    """Process manually-supplied postings through the discovery pipeline.
+
+    Reads JSON array from postings_path, runs each posting through the same
+    anti-target / match / score / candidate-tracking pipeline as a scan,
+    writes a timestamped ingest digest, and updates candidate state.
+
+    Does NOT touch seen-jobs.json - the user may want to re-ingest a URL if
+    the JD changed, and manual ingest should never silently filter on repeat.
+    """
+    try:
+        raw = json.loads(postings_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"ERROR: Could not read postings file {postings_path}: {e}")
+        return 1
+    if not isinstance(raw, list):
+        print("ERROR: Postings file must be a JSON array of objects.")
+        return 1
+
+    required = {"companies.yaml": "companies", "keywords.yaml": "keywords/scoring rules",
+                "filters.yaml": "anti-target filters"}
+    for filename, purpose in required.items():
+        path = config_dir / filename
+        if not path.exists():
+            print(f"ERROR: Missing {path} ({purpose})")
+            return 1
+
+    companies = load_yaml(config_dir / "companies.yaml")
+    keywords = load_yaml(config_dir / "keywords.yaml")
+    filters = load_yaml(config_dir / "filters.yaml")
+    match_rules = keywords.get("match_rules") or {}
+    scoring = keywords.get("scoring") or {}
+
+    jobs, skipped = _build_manual_jobs(raw)
+    if not jobs and not skipped:
+        print("No postings to process.")
+        return 0
+    print(f"Ingesting {len(jobs)} posting(s) ({len(skipped)} skipped as malformed)")
+
+    # Previously-declined warning (no skip, just surface)
+    apps_raw = framework_config.get("applications_file")
+    apps_file = Path(apps_raw).expanduser() if apps_raw else None
+    declined_urls = load_declined_urls(apps_file)
+    declined_hits = [j for j in jobs if j.url in declined_urls]
+
+    # Filter + score + track (results tuple: score, job, is_match, anti_reason, filter_reason)
+    results: list[tuple[int, Job, bool, str, str]] = []
+    for job in jobs:
+        is_anti, anti_reason = is_anti_target(job, filters)
+        if is_anti:
+            results.append((0, job, False, anti_reason, ""))
+            continue
+        rejection = explain_match_rejection(job, match_rules)
+        if rejection:
+            results.append((0, job, False, "", rejection))
+            continue
+        score = score_job(job, scoring)
+        results.append((score, job, True, "", ""))
+
+    # Candidate tracking - same treatment as board-source jobs
+    candidate_file = state_file.parent / "candidate-companies.json"
+    candidates_state = candidates_mod.load_candidates(candidate_file)
+    new_candidate_entries: list[dict] = []
+    if not dry_run:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for score, job, is_match, _, _ in results:
+            if not is_match:
+                continue
+            if candidates_mod.is_known_company(job.company, companies):
+                continue
+            key = normalize_company(job.company or "")
+            # Track whether this was a pre-existing candidate or a new one
+            existed = key in candidates_state.get("candidates", {})
+            candidates_mod.update_candidate(candidates_state, job, score, now_iso)
+            if not existed:
+                entry = candidates_state["candidates"].get(key)
+                if entry:
+                    new_candidate_entries.append(entry)
+        candidates_mod.save_candidates(candidates_state, candidate_file)
+
+    out_path = write_ingest_digest(
+        results, skipped, declined_hits, new_candidate_entries, digest_dir,
+    )
+
+    matches_count = sum(1 for _, _, m, _, _ in results if m)
+    anti_count = sum(1 for _, _, m, r, _ in results if not m and r)
+    filtered_count = sum(1 for _, _, m, r, f in results if not m and not r and f)
+    print(f"Matches: {matches_count} | Anti-target: {anti_count} | "
+          f"Filtered: {filtered_count} | Prev-declined: {len(declined_hits)}")
+    print(f"Digest written: {out_path}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Job Discovery Agent")
     parser.add_argument("--dry-run", action="store_true", help="Run scan but don't update state")
     parser.add_argument("--verify", action="store_true", help="Verify company slugs return results")
+    parser.add_argument("--ingest", type=Path, default=None,
+                        help="Process manually-supplied postings from a JSON array file")
     parser.add_argument("--config", type=Path, default=None,
                         help="Path to framework config.yaml (default: ../config.yaml relative to this file)")
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -508,6 +856,18 @@ def main() -> int:
         logging.info("  config_dir: %s", config_dir)
         logging.info("  state_file: %s", state_file)
         logging.info("  digest_dir: %s", digest_dir)
+
+    # Ingest mode short-circuits the normal scan - it reads postings from JSON
+    # and runs them through the same filter/score/candidate pipeline.
+    if args.ingest:
+        return run_ingest(
+            postings_path=args.ingest,
+            config_dir=config_dir,
+            state_file=state_file,
+            digest_dir=digest_dir,
+            framework_config=framework_config,
+            dry_run=args.dry_run,
+        )
 
     required_configs = {
         "companies.yaml": "companies",
