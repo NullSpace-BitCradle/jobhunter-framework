@@ -220,3 +220,189 @@ class TestLoadDeclinedUrlsNormalization:
         # Simulate the scan seeing the same job with different tracking
         scan_url = "https://www.linkedin.com/jobs/view/1001?trk=session_b&utm_source=newsletter"
         assert normalize_url(scan_url) in declined
+
+
+# ---------------------------------------------------------------------------
+# load_repeat_decline_pairs - same Company+Role declined N+ times
+# ---------------------------------------------------------------------------
+
+class TestLoadRepeatDeclinePairs:
+    """Auto-derive (company, title) skip-pairs from tracker rows where the same
+    posting pattern has been declined REPEAT_DECLINE_THRESHOLD or more times.
+    Motivating case: Fivetran Senior Sales Engineer declined 4 times in 5 days
+    with identical SE-function-mismatch reasoning, each time with a fresh
+    gh_jid URL that defeats URL-based skipping.
+    """
+
+    def _tracker(self, tmp_path, rows: list[tuple[str, str, str]]):
+        """Write a tracker with (status, company, role) rows."""
+        lines = [
+            "| Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for status, company, role in rows:
+            lines.append(
+                f"| 2026-04-10 | {company} | {role} | {status} | 2026-04-10 | 5 |  | "
+                f"<https://x.com/{abs(hash((company, role, status))) % 100000}> | |"
+            )
+        path = tmp_path / "applications.md"
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    def test_returns_empty_when_no_tracker(self, tmp_path):
+        from main import load_repeat_decline_pairs
+        assert load_repeat_decline_pairs(None) == set()
+        assert load_repeat_decline_pairs(tmp_path / "missing.md") == set()
+
+    def test_below_threshold_not_returned(self, tmp_path):
+        from main import load_repeat_decline_pairs
+        tracker = self._tracker(tmp_path, [
+            ("declined_anti_target", "Fivetran", "Senior Sales Engineer, Enterprise"),
+            ("declined_anti_target", "Fivetran", "Senior Sales Engineer, Enterprise"),
+        ])
+        assert load_repeat_decline_pairs(tracker, threshold=3) == set()
+
+    def test_at_or_above_threshold_returned(self, tmp_path):
+        from main import load_repeat_decline_pairs
+        from dedup import normalize_company
+        from main import normalize_title
+        tracker = self._tracker(tmp_path, [
+            ("declined_anti_target", "Fivetran", "Senior Sales Engineer, Enterprise"),
+            ("declined_anti_target", "Fivetran", "Senior Sales Engineer, Enterprise"),
+            ("declined_anti_target", "Fivetran", "Senior Sales Engineer, Enterprise"),
+        ])
+        result = load_repeat_decline_pairs(tracker, threshold=3)
+        assert (normalize_company("Fivetran"), normalize_title("Senior Sales Engineer, Enterprise")) in result
+
+    def test_only_declined_anti_target_status_counted(self, tmp_path):
+        """Other terminal statuses (rejected, withdrew) should NOT contribute to
+        the repeat-decline counter - they reflect distinct workflows (post-submit
+        rejection vs pre-submit anti-target refusal). Only the latter is a
+        signal that the JD pattern is dead weight at discovery time."""
+        from main import load_repeat_decline_pairs
+        tracker = self._tracker(tmp_path, [
+            ("declined_anti_target", "Fivetran", "Senior Sales Engineer, Enterprise"),
+            ("rejected", "Fivetran", "Senior Sales Engineer, Enterprise"),
+            ("rejected", "Fivetran", "Senior Sales Engineer, Enterprise"),
+            ("rejected", "Fivetran", "Senior Sales Engineer, Enterprise"),
+        ])
+        # Only 1 declined_anti_target row, threshold is 3 - should be empty
+        assert load_repeat_decline_pairs(tracker, threshold=3) == set()
+
+    def test_company_normalized_for_match(self, tmp_path):
+        """Tracker may have 'Fivetran' but discovery sees 'Fivetran, Inc.' - the
+        normalize_company() helper should fold these into the same key."""
+        from main import load_repeat_decline_pairs, normalize_title
+        from dedup import normalize_company
+        tracker = self._tracker(tmp_path, [
+            ("declined_anti_target", "Fivetran", "Senior Sales Engineer, Enterprise"),
+            ("declined_anti_target", "Fivetran, Inc.", "Senior Sales Engineer, Enterprise"),
+            ("declined_anti_target", "fivetran", "Senior Sales Engineer, Enterprise"),
+        ])
+        result = load_repeat_decline_pairs(tracker, threshold=3)
+        # All three should normalize to the same company key
+        expected_key = (normalize_company("Fivetran"), normalize_title("Senior Sales Engineer, Enterprise"))
+        assert expected_key in result
+
+    def test_different_roles_at_same_company_independent(self, tmp_path):
+        """Three different role declines at the same company should NOT trigger
+        the threshold for any individual role."""
+        from main import load_repeat_decline_pairs
+        tracker = self._tracker(tmp_path, [
+            ("declined_anti_target", "Tenable", "Sales Security Engineer"),
+            ("declined_anti_target", "Tenable", "Sales Engineer Federal"),
+            ("declined_anti_target", "Tenable", "Director of Detection Engineering"),
+        ])
+        assert load_repeat_decline_pairs(tracker, threshold=3) == set()
+
+
+# ---------------------------------------------------------------------------
+# persist_board_descriptions - JD body cache for /apply
+# ---------------------------------------------------------------------------
+
+class TestPersistBoardDescriptions:
+    """JobSpy fetches descriptions during /discover but discards them. /apply
+    has to re-WebFetch each LinkedIn URL, hitting 403s frequently. Persisting
+    the JD body keyed by normalized URL gives /apply a local cache to read
+    from, eliminating the redundant fetch round-trip.
+    """
+
+    def test_writes_normalized_url_keyed_descriptions(self, tmp_path):
+        from main import persist_board_descriptions
+        cache = tmp_path / "board-descriptions.json"
+        jobs = [
+            _job(
+                id="jobspy:linkedin:abc",
+                company="TestSec",
+                title="Senior Offensive Security Consultant",
+                url="https://www.linkedin.com/jobs/view/4402721640?trk=foo",
+                description_text="Manual web app pentest, 6-8 yrs experience.",
+                source="board",
+            ),
+        ]
+        persist_board_descriptions(jobs, cache)
+        data = json.loads(cache.read_text())
+        # URL key should be normalized (no trk= tracking param)
+        assert "https://www.linkedin.com/jobs/view/4402721640" in data
+        entry = data["https://www.linkedin.com/jobs/view/4402721640"]
+        assert entry["company"] == "TestSec"
+        assert entry["description"] == "Manual web app pentest, 6-8 yrs experience."
+        assert "saved_at" in entry
+
+    def test_skips_jobs_without_description(self, tmp_path):
+        from main import persist_board_descriptions
+        cache = tmp_path / "board-descriptions.json"
+        jobs = [
+            _job(url="https://example.com/1", description_text="", source="board"),
+            _job(url="https://example.com/2", description_text="real content", source="board"),
+        ]
+        persist_board_descriptions(jobs, cache)
+        data = json.loads(cache.read_text())
+        assert len(data) == 1
+        assert "https://example.com/2" in data
+
+    def test_merges_with_existing_cache(self, tmp_path):
+        """A second discovery run should add new entries without clobbering
+        prior ones (subject to TTL pruning)."""
+        from main import persist_board_descriptions
+        cache = tmp_path / "board-descriptions.json"
+        first_run = [_job(url="https://x.com/1", description_text="first", source="board")]
+        persist_board_descriptions(first_run, cache)
+        second_run = [_job(url="https://x.com/2", description_text="second", source="board")]
+        persist_board_descriptions(second_run, cache)
+        data = json.loads(cache.read_text())
+        assert "https://x.com/1" in data
+        assert "https://x.com/2" in data
+
+    def test_prunes_stale_entries(self, tmp_path):
+        """Entries older than SEEN_ID_MAX_AGE_DAYS get dropped on next write."""
+        from main import persist_board_descriptions, SEEN_ID_MAX_AGE_DAYS
+        cache = tmp_path / "board-descriptions.json"
+        # Pre-seed with a stale entry
+        stale_iso = (datetime.now(timezone.utc) - timedelta(days=SEEN_ID_MAX_AGE_DAYS + 5)).isoformat()
+        cache.write_text(json.dumps({
+            "https://stale.example.com/old": {
+                "company": "OldCo", "title": "T", "location": "",
+                "description": "stale", "posted_at": None, "saved_at": stale_iso,
+            }
+        }))
+        # Trigger a write with a fresh entry
+        persist_board_descriptions(
+            [_job(url="https://fresh.example.com/new", description_text="fresh", source="board")],
+            cache,
+        )
+        data = json.loads(cache.read_text())
+        assert "https://stale.example.com/old" not in data
+        assert "https://fresh.example.com/new" in data
+
+    def test_corrupt_cache_starts_fresh(self, tmp_path):
+        """A corrupt JSON file shouldn't crash discovery; just start fresh."""
+        from main import persist_board_descriptions
+        cache = tmp_path / "board-descriptions.json"
+        cache.write_text("not valid json {{{")
+        persist_board_descriptions(
+            [_job(url="https://x.com/1", description_text="ok", source="board")],
+            cache,
+        )
+        data = json.loads(cache.read_text())
+        assert "https://x.com/1" in data

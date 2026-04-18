@@ -26,7 +26,15 @@ If `config.yaml` is missing, warn the user and fall back to the project root for
 
 The user's input is one of:
 
-**A URL** - use the WebFetch tool to retrieve the page. Extract:
+**A URL** - before WebFetch, check the board-descriptions cache at `<discovery.state_file parent>/board-descriptions.json` (default: `~/JobHunt/discovery/state/board-descriptions.json`). `/discover` persists JD bodies here for every LinkedIn / Indeed / Glassdoor posting it pulls via JobSpy. Compare the submitted URL's canonical form against cache keys. To canonicalize, run:
+
+```bash
+cd <repo>/discovery && source venv/bin/activate && python main.py --normalize-url "<url>"
+```
+
+If the normalized URL has a cache hit, use the cached `description`, `company`, `title`, `location`, and `posted_at` fields directly instead of WebFetch. This avoids LinkedIn 403s and rate limits on URLs the scanner has already fetched. Cached entries are pruned after 60 days, so very old digest URLs will still require WebFetch. Only fall back to WebFetch if the cache misses.
+
+If the cache misses (or the input is an ATS URL not covered by JobSpy), use the WebFetch tool. Extract:
 - Company name (from page title, metadata, or URL)
 - Job title
 - Location

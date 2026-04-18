@@ -84,6 +84,19 @@ def resolve_paths(framework_config: dict) -> tuple[Path, Path, Path]:
 SEEN_ID_MAX_AGE_DAYS = 60
 SEEN_ID_MAX_COUNT = 50000
 
+# (Company, normalized-title) pairs declined this many times in the applications
+# tracker get auto-filtered at discovery time. Each new posting of a repeated
+# decline gets a fresh URL (gh_jid increments), so URL-based blocking misses
+# them. Threshold 3 means: first three declines accumulate signal manually,
+# fourth and onward are auto-skipped. Lowering risks false positives; raising
+# means more wasted /apply triage cycles for known-dead patterns.
+REPEAT_DECLINE_THRESHOLD = 3
+
+# Sidecar file (next to seen-jobs.json) where JobSpy-fetched LinkedIn / board
+# JD body text is persisted. /apply reads from this cache before falling back
+# to WebFetch, avoiding LinkedIn 403s on URLs the scanner has already pulled.
+BOARD_DESCRIPTIONS_FILENAME = "board-descriptions.json"
+
 # Matches a tracker row where the first cell is an ISO date (YYYY-MM-DD). Robust
 # against year boundaries and accidental text that happens to start with "| 20".
 _TRACKER_DATE_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}\b")
@@ -227,6 +240,118 @@ def load_tracker_identity_keys(
     except Exception as e:
         logging.warning("Could not parse applications tracker %s: %s", applications_file, e)
     return urls, pairs
+
+
+def load_repeat_decline_pairs(
+    applications_file: Path | None,
+    threshold: int = REPEAT_DECLINE_THRESHOLD,
+) -> set[tuple[str, str]]:
+    """Return (normalized_company, normalized_title) pairs declined as anti-target
+    `threshold` or more times in the applications tracker.
+
+    Same-company-same-role postings frequently re-appear with a fresh URL
+    (gh_jid increments at the source ATS) which defeats URL-based skip logic.
+    Counting tracker rows by (company, title) and surfacing the repeat-offender
+    pairs lets discovery auto-skip the next posting without waiting for /apply
+    triage to re-derive the same anti-target reasoning. Fivetran Senior Sales
+    Engineer is the canonical motivating case (4 declines in 5 days, identical
+    SE-function-mismatch reasoning each time).
+
+    The threshold (default 3) balances signal-gathering against noise: first
+    three declines accumulate manually; the fourth is the cost the heuristic
+    saves. Lower thresholds risk filtering away genuine retries; higher
+    thresholds delay the savings.
+    """
+    if not applications_file or not applications_file.exists():
+        return set()
+    counts: dict[tuple[str, str], int] = {}
+    try:
+        lines = applications_file.read_text().splitlines()
+        header = _parse_tracker_header(lines)
+        if not header:
+            return set()
+        status_idx = header.get("status")
+        company_idx = header.get("company")
+        role_idx = header.get("role")
+        if any(i is None for i in (status_idx, company_idx, role_idx)):
+            return set()
+        for line in lines:
+            if not _TRACKER_DATE_ROW.match(line):
+                continue
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) <= max(status_idx, company_idx, role_idx):
+                continue
+            if cells[status_idx].lower() != "declined_anti_target":
+                continue
+            company = cells[company_idx]
+            role = cells[role_idx]
+            if not company or not role:
+                continue
+            key = (normalize_company(company), normalize_title(role))
+            counts[key] = counts.get(key, 0) + 1
+    except Exception as e:
+        logging.warning("Could not parse repeat declines from %s: %s", applications_file, e)
+    return {pair for pair, count in counts.items() if count >= threshold}
+
+
+def persist_board_descriptions(board_jobs: list[Job], path: Path) -> None:
+    """Write a URL-keyed JSON map of board-source JD bodies so /apply can read
+    locally instead of re-WebFetching LinkedIn URLs (which often 403).
+
+    JobSpy's `linkedin_fetch_description=true` mode pulls full JD text during
+    discovery, but the data is currently discarded after digest write. Today's
+    batched /apply run hit 10 LinkedIn URLs in sequence; persisting at scan
+    time eliminates those redundant fetches and removes the LinkedIn rate-limit
+    risk from the apply-time critical path.
+
+    Stores `{normalized_url: {company, title, location, description, posted_at,
+    saved_at}}`. Prunes entries older than SEEN_ID_MAX_AGE_DAYS to bound size.
+    Atomic via fcntl flock to match save_state's locking discipline.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(days=SEEN_ID_MAX_AGE_DAYS)).isoformat()
+
+    existing: dict = {}
+    if path.exists():
+        try:
+            with path.open() as f:
+                fcntl.flock(f, fcntl.LOCK_SH)
+                existing = json.load(f)
+                fcntl.flock(f, fcntl.LOCK_UN)
+        except (json.JSONDecodeError, OSError, ValueError) as e:
+            logging.warning("Corrupt board-descriptions cache at %s: %s - starting fresh", path, e)
+            existing = {}
+
+    if not isinstance(existing, dict):
+        existing = {}
+
+    # Prune stale entries before adding new ones.
+    existing = {
+        url: data for url, data in existing.items()
+        if isinstance(data, dict) and data.get("saved_at", "") >= cutoff
+    }
+
+    now_iso = now.isoformat()
+    for job in board_jobs:
+        if not job.url or not job.description_text:
+            continue
+        url_key = normalize_url(job.url)
+        if not url_key:
+            continue
+        existing[url_key] = {
+            "company": job.company,
+            "title": job.title,
+            "location": job.location,
+            "description": job.description_text,
+            "posted_at": job.posted_at.isoformat() if job.posted_at else None,
+            "saved_at": now_iso,
+        }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        json.dump(existing, f, indent=2)
+        fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def load_state(state_file: Path) -> dict:
@@ -559,6 +684,11 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_
     lines.append(f"- **Skipped (anti-target):** {len(skipped_anti)}")
     if stats.get('declined_filtered'):
         lines.append(f"- **Skipped (previously declined in tracker):** {stats['declined_filtered']}")
+    if stats.get('repeat_decline_filtered'):
+        lines.append(
+            f"- **Skipped (Company+Role declined {REPEAT_DECLINE_THRESHOLD}+ times):** "
+            f"{stats['repeat_decline_filtered']}"
+        )
     lines.append("")
 
     if not matches:
@@ -1328,6 +1458,15 @@ def main() -> int:
         if removed:
             print(f"Cross-source dedup removed {removed} duplicate(s)")
 
+    # Persist board-source JD descriptions so /apply can skip WebFetch on
+    # LinkedIn URLs the scanner has already pulled. Skipped on --dry-run since
+    # this writes to disk.
+    if board_jobs and not args.dry_run:
+        persist_board_descriptions(
+            board_jobs,
+            state_file.parent / BOARD_DESCRIPTIONS_FILENAME,
+        )
+
     print(f"Total unique jobs: {len(all_jobs)}")
 
     # Migrate legacy list-based seen_ids to timestamped dict format
@@ -1356,6 +1495,25 @@ def main() -> int:
         declined_filtered = before - len(new_jobs)
         if declined_filtered:
             print(f"Filtered {declined_filtered} previously declined/withdrawn role(s) from tracker")
+
+    # Filter out (Company, normalized-title) pairs declined as anti-target
+    # REPEAT_DECLINE_THRESHOLD or more times. Each new posting of the same
+    # role gets a fresh URL so URL-based filtering above misses them; pair
+    # matching catches repeat patterns like Fivetran Senior SE (4x in 5 days).
+    repeat_pairs = load_repeat_decline_pairs(apps_file)
+    repeat_decline_filtered = 0
+    if repeat_pairs:
+        before = len(new_jobs)
+        new_jobs = [
+            j for j in new_jobs
+            if (normalize_company(j.company or ""), normalize_title(j.title or "")) not in repeat_pairs
+        ]
+        repeat_decline_filtered = before - len(new_jobs)
+        if repeat_decline_filtered:
+            print(
+                f"Filtered {repeat_decline_filtered} repeat-decline (Company+Role declined "
+                f"{REPEAT_DECLINE_THRESHOLD}+ times in tracker) job(s)"
+            )
 
     match_rules = keywords.get("match_rules") or {}
     scoring = keywords.get("scoring") or {}
@@ -1409,6 +1567,7 @@ def main() -> int:
         "board_fetched": len(board_jobs),
         "new_jobs": len(new_jobs),
         "declined_filtered": declined_filtered,
+        "repeat_decline_filtered": repeat_decline_filtered,
         "candidate_companies": candidates_mod.promotable_candidates(candidates_state),
     }
     out_path = write_digest(results, stats, digest_dir)
