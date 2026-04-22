@@ -18,12 +18,47 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from datetime import date
 from pathlib import Path
 
-TRACKER_PATH = Path("~/JobHunt/applications.md").expanduser()
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_tracker_path() -> Path:
+    """Honor the framework's config.yaml the same way discovery/main.py does.
+
+    Order of resolution:
+      1. $JOBHUNTER_APPLICATIONS_FILE (env override, useful for tests and CI)
+      2. applications_file key in <repo>/config.yaml
+      3. Fallback: <repo>/applications.md (keeps the script usable standalone
+         when no config.yaml exists, e.g. fresh clones before setup)
+    """
+    env = os.environ.get("JOBHUNTER_APPLICATIONS_FILE")
+    if env:
+        return Path(env).expanduser()
+
+    config_path = _REPO_ROOT / "config.yaml"
+    if config_path.exists():
+        try:
+            import yaml
+        except ImportError:
+            yaml = None  # PyYAML may not be installed in a minimal env
+        if yaml is not None:
+            try:
+                cfg = yaml.safe_load(config_path.read_text()) or {}
+                raw = cfg.get("applications_file")
+                if raw:
+                    return Path(raw).expanduser()
+            except Exception as e:  # pragma: no cover - malformed config
+                print(f"WARN: could not parse {config_path}: {e}", file=sys.stderr)
+
+    return _REPO_ROOT / "applications.md"
+
+
+TRACKER_PATH = _resolve_tracker_path()
 
 # Section header positions we care about
 SECTION_NAMES = ("Queued", "In Process", "Rejected", "Declined")

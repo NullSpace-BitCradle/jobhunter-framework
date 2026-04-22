@@ -221,6 +221,26 @@ class TestLoadDeclinedUrlsNormalization:
         scan_url = "https://www.linkedin.com/jobs/view/1001?trk=session_b&utm_source=newsletter"
         assert normalize_url(scan_url) in declined
 
+    def test_withdrew_status_included(self, tmp_path):
+        """Regression test: the canonical spelling in every doc and slash
+        command (README, CLAUDE.md, /decline, applications.template.md) is
+        `withdrew`. Terminal-status set had `withdrawn` only for one release,
+        which silently dropped every `/decline`-touched row from the
+        discovery skip-list. Covering both here so either spelling keeps
+        working.
+        """
+        tracker = self._tracker(tmp_path, [
+            ("withdrew", "<https://www.linkedin.com/jobs/view/5001>"),
+            ("withdrawn", "<https://www.linkedin.com/jobs/view/5002>"),
+            ("declined_anti_target", "<https://www.linkedin.com/jobs/view/5003>"),
+            ("queued", "<https://www.linkedin.com/jobs/view/5004>"),
+        ])
+        declined = load_declined_urls(tracker)
+        assert "https://www.linkedin.com/jobs/view/5001" in declined, "withdrew must be terminal"
+        assert "https://www.linkedin.com/jobs/view/5002" in declined, "withdrawn (legacy) must be terminal"
+        assert "https://www.linkedin.com/jobs/view/5003" in declined
+        assert "https://www.linkedin.com/jobs/view/5004" not in declined
+
 
 # ---------------------------------------------------------------------------
 # load_repeat_decline_pairs - same Company+Role declined N+ times

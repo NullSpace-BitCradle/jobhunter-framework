@@ -104,13 +104,19 @@ BOARD_DESCRIPTIONS_FILENAME = "board-descriptions.json"
 # against year boundaries and accidental text that happens to start with "| 20".
 _TRACKER_DATE_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}\b")
 
-_TRACKER_TERMINAL_STATUSES = {"withdrawn", "rejected", "declined_anti_target"}
+# Terminal statuses used as the durable discovery skip-list. The canonical
+# spelling is `withdrew` (matching README, CLAUDE.md, applications.template.md,
+# /decline, and every row set by slash commands). `withdrawn` is tolerated as
+# a historical alias so tracker files hand-edited before the 4-section
+# restructure don't silently drop from the skip-list.
+_TRACKER_TERMINAL_STATUSES = {"withdrew", "withdrawn", "rejected", "declined_anti_target"}
 
 # Valid tracker statuses for reference and filtering. Ordered by state-machine
-# position (first = earliest, last = terminal).
+# position (first = earliest, last = terminal). Both `withdrew` (canonical) and
+# `withdrawn` (legacy alias) are accepted.
 _TRACKER_ALL_STATUSES = {
     "queued", "applied", "ack", "screen", "interview", "offer",
-    "rejected", "withdrawn", "declined_anti_target",
+    "rejected", "withdrew", "withdrawn", "declined_anti_target",
 }
 
 
@@ -1486,7 +1492,7 @@ def main() -> int:
     new_jobs = [j for j in all_jobs if j.id not in seen_ids]
     print(f"New since last run: {len(new_jobs)}")
 
-    # Filter out URLs already marked withdrawn / rejected / declined_anti_target
+    # Filter out URLs already marked withdrew / rejected / declined_anti_target
     # in the applications tracker. Survives state-file resets.
     apps_raw = framework_config.get("applications_file")
     apps_file = Path(apps_raw).expanduser() if apps_raw else None

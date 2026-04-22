@@ -28,9 +28,47 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-APP_FILE = Path("~/JobHunt/applications.md").expanduser()
-JOBS_DIR = Path("~/JobHunt/jobs").expanduser()
-OUTPUT_DIR = Path("~/JobHunt/output").expanduser()
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_paths() -> tuple[Path, Path, Path]:
+    """Resolve (applications_file, jd_dir, output_dir) from framework config.
+
+    Order of resolution (same pattern as discovery/main.py):
+      1. $JOBHUNTER_APPLICATIONS_FILE / $JOBHUNTER_JD_DIR / $JOBHUNTER_OUTPUT_DIR
+      2. Keys in <repo>/config.yaml: applications_file, jd_dir, output_dir
+      3. Fallback to <repo>/applications.md, <repo>/jobs, <repo>/output (keeps
+         the script usable standalone before the user has created config.yaml).
+    """
+    cfg: dict = {}
+    config_path = _REPO_ROOT / "config.yaml"
+    if config_path.exists():
+        try:
+            import yaml
+        except ImportError:
+            yaml = None
+        if yaml is not None:
+            try:
+                cfg = yaml.safe_load(config_path.read_text()) or {}
+            except Exception as e:  # pragma: no cover - malformed config
+                print(f"WARN: could not parse {config_path}: {e}", file=sys.stderr)
+
+    def _pick(env_key: str, cfg_key: str, default: Path) -> Path:
+        env = os.environ.get(env_key)
+        if env:
+            return Path(env).expanduser()
+        raw = cfg.get(cfg_key)
+        if raw:
+            return Path(raw).expanduser()
+        return default
+
+    app = _pick("JOBHUNTER_APPLICATIONS_FILE", "applications_file", _REPO_ROOT / "applications.md")
+    jobs = _pick("JOBHUNTER_JD_DIR", "jd_dir", _REPO_ROOT / "jobs")
+    output = _pick("JOBHUNTER_OUTPUT_DIR", "output_dir", _REPO_ROOT / "output")
+    return app, jobs, output
+
+
+APP_FILE, JOBS_DIR, OUTPUT_DIR = _resolve_paths()
 
 # Status -> target section
 SECTION_FOR_STATUS = {
