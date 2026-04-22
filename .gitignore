@@ -48,11 +48,25 @@ Thumbs.db
 #   - .gitmodules (ext4 mount point, not a real submodule file)
 #   - Node/Bun/npm scaffolding (empty package.json, lockfiles, rc files) that
 #     gets re-dropped into project dirs even after deletion
+#   - Shell rc files, IDE dirs, MCP config, and misc dotfiles the sandbox drops
+#     as read-only 0-byte decoys to prevent tool escape to the user's real home
 **/settings.json
 **/settings.local.json
 .claude/skills
 discovery/.claude/
 /.gitmodules
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.github
+/.idea
+/.mcp.json
+/.profile
+/.ripgreprc
+/.vscode
+/.zprofile
+/.zshrc
+/scripts
 /discovery/.gitmodules
 /discovery/.npmrc
 /discovery/.yarnrc

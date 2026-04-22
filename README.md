@@ -23,7 +23,7 @@ Built for senior and principal IC candidates who care more about signal than vol
   Results pass through keyword, location, remote, and anti-target filters, then get ranked by a configurable scoring function and written to a daily digest.
 - **Resume Writer** (`.claude/agents/ats-resume-writer.md`) - generates ATS-optimized LaTeX resumes and cover letters from MCD + job description, with anti-target, stretch-fit, crown-jewel, summary-authenticity, and founding-employee guards running before any tailoring.
 - **Orchestration commands** (`.claude/commands/`) - slash commands that chain the pieces into one workflow.
-- **Application tracker** - plain-markdown table with an explicit status state machine: `queued -> applied -> ack -> screen -> interview -> offer | rejected | withdrew`.
+- **Application tracker** - plain-markdown file with four sections (`## Queued`, `## In Process`, `## Rejected`, `## Declined`) and an explicit status state machine: `queued -> applied -> ack -> screen -> interview -> offer | rejected | withdrew`. Rows move across sections as status changes. Resume and cover letter files are deleted when a row lands in `## Declined` - only materials for roles the user actually submitted are retained.
 
 ## Architecture
 
@@ -170,9 +170,10 @@ Build the MCD once. Maintain it as a living document. Update it when you take a 
 | `/discover [--verify \| --dry-run \| -v]` | Run a discovery scan, show the top new matches by score. |
 | `/ingest <urls \| file>` | Feed manually-found postings (LinkedIn, recruiter emails, etc.) through the same filter + score + candidate pipeline as discovery. Separate digest, read-only against the tracker. |
 | `/backfill [--days N] [--limit N] [--min-score N] [--max-score N]` | Walk back over past digests for matched jobs never logged to the tracker. For casting a wider net or filling gaps when new postings are light. |
-| `/apply <url \| company \| JD path>` | End-to-end: fetch JD, run lane-fit and anti-target checks, tailor resume and cover letter, log application as `queued`. |
-| `/submitted <company> [role hint]` | Flip a `queued` row to `applied` after you submit via the company portal. |
-| `/triage [--limit N] [--days N]` | Classify recent mail in the job-hunt inbox, update tracker status forward along the state machine, schedule interviews on calendar. |
+| `/apply <url \| company \| JD path>` | End-to-end: fetch JD, run lane-fit and anti-target checks, tailor resume and cover letter, log application into `## Queued` as `queued`. |
+| `/submitted <company> [role hint]` | Move a `queued` row to `## In Process` with status `applied` after you submit via the company portal. Also relocates the resume and cover letter PDFs into `output/applied/`. |
+| `/decline <company> [reason]` | Move a `queued` row to `## Declined` with status `withdrew` when you decide not to pursue it (posting closed, role turned out to be part-time, etc.). Deletes the resume and cover letter files; keeps the JD. |
+| `/triage [--limit N] [--days N]` | Classify recent mail in the job-hunt inbox, update tracker status forward along the state machine, move rows across sections as state transitions, schedule interviews on calendar. |
 | `/sync-filters [--check]` | Regenerate `discovery/config/filters.yaml` from the MCD's Anti-Target Lanes section (or check drift only). |
 
 `/apply` surfaces warnings before generating:
@@ -182,26 +183,58 @@ Build the MCD once. Maintain it as a living document. Update it when you take a 
 
 ## Application tracker
 
-Every application lives as a row in `applications.md`. The file holds two tables with identical columns:
+Every application lives as a row in `applications.md`. The file holds four sections with identical columns (Date Applied, Company, Role, Status, Last Update, Score, Files, URL, Notes):
 
-- `## Applications` - everything you actually submitted. Every status except `declined_anti_target` lives here.
-- `## Declined (anti-target, not submitted)` - roles `/apply` refused to tailor. Kept so discovery skips them but pulled out of the main view so you can see what you are actually working with.
+- `## Queued` - status `queued`. Resume + cover letter generated, not yet submitted.
+- `## In Process` - statuses `applied`, `ack`, `screen`, `interview`, `offer`. Submitted and active.
+- `## Rejected` - status `rejected`. The company declined or ghosted. Files retained because the user did apply.
+- `## Declined` - statuses `withdrew`, `declined_anti_target`. User chose not to pursue, or framework refused to tailor. Resume and cover letter files are deleted when a row lands here; JD stays.
 
-The status column in the main table moves forward along:
+The status state machine:
 
 ```
 queued -> applied -> ack -> screen -> interview -> offer | rejected | withdrew
 ```
 
-Plus one terminal state that lives only in the Declined table:
-- `declined_anti_target` - framework refused to tailor for an anti-target lane
+Plus one status set directly by `/apply` when the MCD anti-target check refuses:
+- `declined_anti_target` - no resume or cover letter generated; the row is logged to `## Declined` immediately.
 
-`/apply` appends rows as `queued` to the main table (or to the Declined table if Step 3 refused). Rows move forward through:
-- `/submitted <company>` - manual flip after submitting through the portal
-- `/triage` - detects ack, screen, interview, or rejection mail and fast-forwards the row accordingly (status regression is blocked; `ack` rows cannot go back to `queued`; declined rows are never touched)
-- Hand-edits - it is plain markdown, edit freely
+**Files column format:** `[resume](<path>) / [cover](<path>) / [jd](<path>)` as three markdown links. The JD link is always present once a JD is fetched; resume and cover are present while the files exist.
 
-The discovery scanner uses rows with terminal status (`rejected`, `withdrew`, `declined_anti_target`) as a durable skip list, scanning both tables, so roles you have already declined will not resurface even if the state file gets cleared.
+**File retention rule:** resume + cover letter files are retained only for roles the user actually submitted. `## Queued`, `## In Process`, and `## Rejected` rows keep their files. `## Declined` rows have their resume + cover files deleted. The JD file under `jobs/` is kept regardless - it is the record of the posting.
+
+**Commands that move rows across sections:**
+- `/apply` appends new rows to `## Queued` (or `## Declined` if the anti-target check refuses)
+- `/submitted <company>` moves a row from `## Queued` to `## In Process` (status `queued -> applied`) and relocates the resume and cover PDFs into `output/applied/`
+- `/decline <company> [reason]` moves a row from `## Queued` to `## Declined` (status `queued -> withdrew`) and deletes the resume and cover files
+- `/triage` fast-forwards status from inbox mail and moves rows across section boundaries automatically (ack -> In Process; rejection -> Rejected)
+- Hand-edits are welcome - plain markdown. If you hand-edit a row into `## Declined`, delete the resume + cover files yourself or run `/decline` instead of editing manually
+
+**Stats line:** a one-line summary sits at the top of `applications.md` just above `## Status legend`, showing the count in each section plus the total:
+
+```
+**Current state:** Queued 17 | In Process 22 | Rejected 10 | Declined 58 | **Total 107** | Updated 2026-04-22
+```
+
+Refresh it manually with `python3 discovery/update_tracker_stats.py`. For auto-update, add a `PostToolUse` hook to `.claude/settings.local.json` that fires whenever `applications.md` is touched via Edit/Write:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Edit|Write",
+      "hooks": [{
+        "type": "command",
+        "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | grep -qF '/applications.md' && python3 /absolute/path/to/jobhunter-framework/discovery/update_tracker_stats.py 2>/dev/null || true"
+      }]
+    }]
+  }
+}
+```
+
+Adjust the absolute path to match your clone. The script is idempotent, so re-runs on unchanged state are safe.
+
+The discovery scanner uses rows with terminal status (`rejected`, `withdrew`, `declined_anti_target`) as a durable skip list regardless of which section they live in, so roles you have already declined will not resurface even if the state file gets cleared.
 
 ## Discovery details
 
@@ -359,7 +392,7 @@ source venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-238 tests cover all 6 scrapers (mocked), filter and scoring logic, state management, digest writing, cross-source deduplication, URL canonicalization, ingest filter rejection reasons (including local on-site allow-regex short-circuit), tracker parsing across the two-table Applications/Declined layout, and JobSpy field mapping.
+238 tests cover all 6 scrapers (mocked), filter and scoring logic, state management, digest writing, cross-source deduplication, URL canonicalization, ingest filter rejection reasons (including local on-site allow-regex short-circuit), tracker parsing across the four-section Queued/In Process/Rejected/Declined layout, and JobSpy field mapping.
 
 ### Project layout
 
@@ -371,13 +404,18 @@ jobhunter-framework/
 │   │   └── career-doc-builder.md    # MCD interview agent
 │   └── commands/
 │       ├── discover.md              # /discover
+│       ├── ingest.md                # /ingest
+│       ├── backfill.md              # /backfill
 │       ├── apply.md                 # /apply
 │       ├── submitted.md             # /submitted
+│       ├── decline.md               # /decline
 │       ├── triage.md                # /triage
 │       └── sync-filters.md          # /sync-filters
 ├── discovery/
 │   ├── main.py                      # scan, filter, score, dedup, digest
 │   ├── dedup.py                     # cross-source dedup
+│   ├── migrate_tracker.py           # one-shot: old 2-section layout -> new 4-section layout
+│   ├── update_tracker_stats.py      # refresh the stats line at the top of applications.md
 │   ├── scrapers/
 │   │   ├── base.py                  # Job dataclass + Scraper base + shared helpers
 │   │   ├── greenhouse.py

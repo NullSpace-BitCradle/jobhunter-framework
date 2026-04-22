@@ -49,9 +49,9 @@ Use `mcp__claude_ai_Gmail__gmail_search_messages` with:
 
 For each message in the result, read subject + sender + first ~500 chars of body via `mcp__claude_ai_Gmail__gmail_read_message`.
 
-**Dedup against the tracker before acting in Step 4.** For each classified message tied to a tracker row, check whether the Status column already reflects the same or downstream state - e.g., if a message classifies as `application_ack` but the row is already `ack`/`screen`/`interview`/`offer`/`rejected`, skip the update. Status transitions should only move forward along: `queued → applied → ack → screen → interview → offer | rejected | withdrew`. Never regress a status.
+**Dedup against the tracker before acting in Step 4.** For each classified message tied to a tracker row, check whether the Status column already reflects the same or downstream state - e.g., if a message classifies as `application_ack` but the row is already `ack`/`screen`/`interview`/`offer`/`rejected`, skip the update. Status transitions should only move forward along: `queued -> applied -> ack -> screen -> interview -> offer | rejected | withdrew`. Never regress a status.
 
-A `queued` row receiving an `application_ack`, `screen_invite`, `interview_invite`, or `rejection` is valid - the downstream event implicitly confirms submission, so fast-forward the status directly (e.g., `queued → ack`) instead of going through `applied`.
+A `queued` row receiving an `application_ack`, `screen_invite`, `interview_invite`, or `rejection` is valid - the downstream event implicitly confirms submission, so fast-forward the status directly (e.g., `queued -> ack`) instead of going through `applied`. When this happens the row also moves sections: out of `## Queued` into `## In Process` (for ack/screen/interview) or `## Rejected` (for rejection). See Step 4 for section-move details.
 
 ## Step 3 - Classify each message
 
@@ -75,11 +75,15 @@ Match sender domain or any company name mentioned against companies already in `
 
 For each confidently-classified message tied to an existing tracker row:
 
-- **`application_ack`** → update Status to `ack`, set Last Update to today. Don't touch other fields.
-- **`screen_invite`** → update Status to `screen`, set Last Update. Add a Note with the proposed time if stated.
-- **`interview_invite`** → update Status to `interview`, set Last Update. If the message includes a proposed date/time, create a Calendar event (see below).
-- **`rejection`** → update Status to `rejected`, set Last Update, add the stated reason to Notes if present.
-- **`offer`** → **do not auto-update.** Flag loudly in the report. Let the user confirm and run `/apply` or a manual edit.
+- **`application_ack`** -> update Status to `ack`, set Last Update to today. Don't touch other fields. If the row is currently in `## Queued`, move it to `## In Process`.
+- **`screen_invite`** -> update Status to `screen`, set Last Update. Add a Note with the proposed time if stated. If in `## Queued`, move to `## In Process`.
+- **`interview_invite`** -> update Status to `interview`, set Last Update. If the message includes a proposed date/time, create a Calendar event (see below). If in `## Queued`, move to `## In Process`.
+- **`rejection`** -> update Status to `rejected`, set Last Update, add the stated reason to Notes if present. **Move the row to `## Rejected`** (from `## Queued` or `## In Process`). Files stay - the user did apply, so resume and cover letter are retained per the retention rule.
+- **`offer`** -> **do not auto-update.** Flag loudly in the report. Let the user confirm and run `/apply` or a manual edit.
+
+**Section move rule:** when a status change crosses a section boundary per `applications.template.md` routing (e.g., `queued -> ack` crosses Queued -> In Process; any status -> `rejected` moves to Rejected), remove the row from its current section and append it to the top of the new section. Preserve all cell values exactly except Status and Last Update (and Notes, when appending a reason).
+
+**File retention on rejection:** `rejected` rows keep their resume and cover letter files - the user did submit. Do NOT delete files on rejection. Only `/decline` (for `queued` roles never submitted) deletes generated materials.
 
 **Calendar events for interview_invite:** use `mcp__claude_ai_Google_Calendar__gcal_create_event`. Event details:
 - Summary: `<Company> - <Role> interview (<type>)`

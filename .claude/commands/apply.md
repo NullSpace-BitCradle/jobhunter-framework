@@ -90,10 +90,11 @@ cd <repo>/discovery && source venv/bin/activate && python main.py --normalize-ur
 
 Do this for both the incoming URL (from Step 2) and each candidate row's URL (strip markdown auto-link wrappers `<url>` and `[text](url)` first). Also match on exact `Company + Role` even if the URL differs, since the same role can be re-posted at a new URL.
 
-If a duplicate is found:
+If a duplicate is found, behavior depends on which section the existing row is in:
 
-- If the existing row's Status is `queued` or `applied` or downstream (`ack`/`screen`/`interview`/`offer`): **stop and surface the match**. Show the user: "Already in tracker as `<status>` from `<date>` (row <N>). Apply again anyway?" Do not proceed without explicit confirmation. On confirm, proceed to Step 4 and append a new row (do not edit the existing row).
-- If the existing row's Status is terminal (`rejected`, `withdrew`, `declined_anti_target`): surface the prior status and reason, then ask: "Previously `<status>`: `<reason>`. Still want to apply?" On confirm, proceed.
+- **`## Queued` or `## In Process`** (statuses `queued`/`applied`/`ack`/`screen`/`interview`/`offer`): **stop and surface the match**. Show the user: "Already in tracker as `<status>` from `<date>` (in `## <section>`). Apply again anyway?" Do not proceed without explicit confirmation. On confirm, proceed to Step 4 and append a new row (do not edit the existing row).
+- **`## Rejected`** (status `rejected`): surface the prior status and reason, then ask: "Previously rejected: `<reason>`. Still want to apply?" On confirm, proceed.
+- **`## Declined`** (status `withdrew` or `declined_anti_target`): surface the prior status and reason, then ask: "Previously `<status>`: `<reason>`. Still want to apply?" On confirm, proceed.
 
 If no duplicate is found, proceed straight to Step 4.
 
@@ -101,12 +102,14 @@ If no duplicate is found, proceed straight to Step 4.
 
 Read `<applications_file>`. If it does not exist, create it by copying `applications.template.md` from the framework repo root, then proceed.
 
-The tracker has two tables with identical columns:
+The tracker has four sections, each with identical columns:
 
-- `## Applications` - everything you actually submitted (any status except `declined_anti_target`).
-- `## Declined (anti-target, not submitted)` - roles `/apply` refused to tailor due to an anti-target match.
+- `## Queued` - status `queued` (generated, not yet submitted)
+- `## In Process` - statuses `applied` / `ack` / `screen` / `interview` / `offer`
+- `## Rejected` - status `rejected`
+- `## Declined` - statuses `withdrew` / `declined_anti_target`
 
-If the file was created before this split and has no `## Declined` section, add one at the bottom using the same header as the main table (see `applications.template.md`) before appending any declined row.
+If the file was created before this split and is missing any of the four section headers, add the missing sections at the bottom using the headers from `applications.template.md` before appending.
 
 Append a new row with these values:
 
@@ -118,16 +121,17 @@ Append a new row with these values:
 | Status | `queued` (or `declined_anti_target` if Step 3 refused) - `/apply` only generates materials. The user still submits manually via each portal; `/triage` or `/submitted` flips the row to `applied` / `ack` later. |
 | Last Update | today |
 | Score | from the digest entry if one existed, else blank |
-| Files | `[resume](<path>) / [cover](<path>)` as markdown links, or blank if declined |
+| Files | `[resume](<resume_path>) / [cover](<cover_path>) / [jd](<jd_path>)` as markdown links. For `declined_anti_target` rows no resume/cover was generated, so just `[jd](<jd_path>)`. |
 | URL | source URL |
 | Notes | stretch-fit reason, refusal reason, or blank |
 
 **Row routing:**
 
-- Status `declined_anti_target` → append under the `## Declined (anti-target, not submitted)` table.
-- Any other status (`queued`, etc.) → append under the `## Applications` table.
+- Status `queued` -> append to `## Queued`
+- Status `declined_anti_target` -> append to `## Declined`
+- (`/apply` never produces other statuses directly; `/submitted`, `/triage`, and `/decline` handle cross-section moves)
 
-Preserve all existing rows untouched. Append at the top of the target table (newest first) unless the existing file is clearly ordered oldest-first, in which case append at the bottom. Never mix a declined row into the main Applications table, and never promote a declined row out of the Declined section.
+Preserve all existing rows untouched. Append at the top of the target section (newest first) unless the existing file is clearly ordered oldest-first, in which case append at the bottom. Never mix a row into the wrong section.
 
 ## Step 5 - Report
 

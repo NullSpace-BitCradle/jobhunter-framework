@@ -1,9 +1,12 @@
 # Applications Tracker
 
 Living record of job applications. `/apply` generates resume + cover letter and
-stacks the row as `queued`. `/submitted` flips `queued → applied` after the user
-submits via the company portal. `/triage` updates status from inbox mail.
-Hand edits are welcome - the format is plain markdown so any editor works.
+stacks the row under `## Queued`. `/submitted` flips `queued -> applied` and moves
+the row to `## In Process` after the user submits via the company portal.
+`/triage` updates status from inbox mail and moves rows across sections as state
+changes. `/decline` removes a Queued row the user decided not to pursue and
+deletes its generated materials. Hand edits are welcome - the format is plain
+markdown so any editor works.
 
 ## Status legend
 
@@ -13,20 +16,51 @@ Hand edits are welcome - the format is plain markdown so any editor works.
 - `screen` - recruiter screen scheduled or completed
 - `interview` - hiring-manager or technical interview in progress
 - `offer` - offer extended
-- `rejected` - explicit decline, or ghosted for 30+ days
-- `withdrew` - pulled by the applicant
+- `rejected` - explicit decline from the company, or ghosted for 30+ days
+- `withdrew` - user pulled the application (pre- or post-submit)
 - `declined_anti_target` - framework refused to tailor due to MCD anti-target match
 
-## Applications
+## Section routing
 
-Active and resolved applications you actually submitted. Rows stay here through every status except `declined_anti_target`, which gets its own section below so this table only shows roles you engaged with.
+Each row lives in exactly one section, determined by its Status:
+
+| Section | Statuses |
+|---|---|
+| `## Queued` | `queued` |
+| `## In Process` | `applied`, `ack`, `screen`, `interview`, `offer` |
+| `## Rejected` | `rejected` |
+| `## Declined` | `withdrew`, `declined_anti_target` |
+
+When a row's status transitions across a section boundary (e.g. `queued -> applied`, `applied -> rejected`), the row moves to the new section.
+
+## File retention rule
+
+Generated resume + cover letter files (`.tex` + `.pdf`) are retained ONLY for roles the user actually submitted. When a row lands in `## Declined` (user-initiated decline or agent anti-target refusal), the matching resume and cover letter files are deleted. The JD file under `jobs/` is kept regardless - it is the record of what the posting said. Rows in `## Rejected` keep their files since the user did apply.
+
+## Queued
+
+Generated materials, not yet submitted. `/apply` appends here. `/submitted` promotes to `## In Process`. `/decline` removes rows and deletes files.
 
 | Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |
 |---|---|---|---|---|---|---|---|---|
 
-## Declined (anti-target, not submitted)
+## In Process
 
-Roles `/apply` refused to tailor due to an MCD anti-target match. Kept as a durable skip list so discovery never resurfaces them, and to document why each was passed over. Columns match the main table exactly. Do not promote rows out of this section - a declined row means the framework declined to submit.
+Active applications the user has submitted. Status progresses through `applied -> ack -> screen -> interview -> offer`. `/triage` fast-forwards status from inbox mail.
+
+| Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |
+|---|---|---|---|---|---|---|---|---|
+
+## Rejected
+
+Applications the company declined, or that went silent for 30+ days. Files retained because the user did apply. Serves as a durable skip list so discovery does not resurface them.
+
+| Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |
+|---|---|---|---|---|---|---|---|---|
+
+## Declined
+
+Roles the user declined to pursue, or that the framework refused to tailor due to an anti-target match. Generated resume + cover letter files are deleted when a row lands here; JD file under `jobs/` is kept. Serves as a durable skip list so discovery does not resurface declined roles.
 
 | Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |
 |---|---|---|---|---|---|---|---|---|
