@@ -81,6 +81,9 @@ Output is written to `discovery/output/digest-YYYY-MM-DD.md`. State (seen-job ID
 
 `applications.template.md` in the repo root is the schema for the tracker file. On first use of `/apply`, if `applications_file` doesn't exist, copy this template into place and proceed.
 
-Tracker columns: Date Applied, Company, Role, Status, Last Update, Score, Files, URL, Notes. Status progresses through: `queued → applied → ack → screen → interview → offer | rejected | withdrew`.
+The tracker has two markdown tables with identical columns: Date Applied, Company, Role, Status, Last Update, Score, Files, URL, Notes.
 
-`/apply` appends rows as `queued` (materials generated, not yet submitted). `/submitted` flips `queued → applied` after the user submits via the portal. `/triage` updates Status and Last Update when it sees relevant mail - it will fast-forward `queued → ack/screen/interview/rejected` directly since those events implicitly confirm submission. Manual hand-edits are welcome - the format is plain markdown.
+- `## Applications` (main) - everything you actually submitted. Status progresses through: `queued → applied → ack → screen → interview → offer | rejected | withdrew`.
+- `## Declined (anti-target, not submitted)` (bottom) - only `declined_anti_target` rows. Kept out of the main view so active and resolved-submitted applications are easier to scan. Still scanned by the discovery skip-list.
+
+`/apply` appends new rows to the main table unless the anti-target check refuses, in which case the row goes to the Declined table. `/submitted` flips `queued → applied` after the user submits via the portal and never touches Declined rows. `/triage` updates Status and Last Update when it sees relevant mail - it will fast-forward `queued → ack/screen/interview/rejected` directly since those events implicitly confirm submission, and never touches Declined rows. Manual hand-edits are welcome - the format is plain markdown.

@@ -10,19 +10,23 @@
 % On Debian/Ubuntu/WSL, these are usually covered by:
 % texlive-latex-recommended texlive-latex-extra texlive-fonts-extra
 % Or install individual packages via `tlmgr --usermode install <pkg>`.
+%
+% DESIGN NOTE: This template uses the `article` document class, not `letter`.
+% The standard `letter` class forces a page break at `\opening`, which pushes
+% the letter body onto page 2 whenever there's a custom header above it
+% (as this template has with the name + contact minipage). It also pairs badly
+% with custom signature blocks and produces duplicate closings. Article class
+% gives full control over flow so the letter header, body, and signature all
+% sit on page 1.
 %%%%
 
-\documentclass[11pt, letterpaper, roman]{letter}
+\documentclass[11pt, letterpaper]{article}
 
-% COMPILE WITH: xelatex (or lualatex). The letter document class forces pdfTeX
-% to render its body text as Type 3 bitmap fonts, which breaks ATS ligature
-% extraction ("Staff" -> "Sta", "findings" -> "ndings", etc.). Switching to
-% xelatex + fontspec gives us scalable Charter via the system font stack, with
-% proper ToUnicode mapping so pdftotext / ATS parsers see the real words.
+% COMPILE WITH: xelatex (or lualatex). fontspec + Charter requires one of these.
 \usepackage{fontspec}
 \setmainfont{Bitstream Charter}
 
-\usepackage[top = 12mm, bottom = 12mm, left=10mm, right=10mm]{geometry}
+\usepackage[top=12mm, bottom=12mm, left=20mm, right=20mm]{geometry}
 \usepackage{ragged2e}
 
 \usepackage[USenglish]{babel}
@@ -34,64 +38,73 @@
 % distributions. Using fontawesome5 here matches the resume template.
 \usepackage{fontawesome5}
 
-\usepackage{fancyhdr}
-
-\usepackage{enumitem}
-
 \usepackage{xcolor}
 \definecolor{cvteal}{HTML}{008080}
 \definecolor{cvblue}{HTML}{304263}
-\usepackage[colorlinks = true, urlcolor = black, linkcolor = white]{hyperref}
+\usepackage[colorlinks = true, urlcolor = black, linkcolor = black]{hyperref}
+
+\pagestyle{empty}
 
 \begin{document}
 
-\pagestyle{empty}
 \raggedbottom
 
-\begin{minipage}[t]{0.5\textwidth}
- \vspace*{\fill}
- \textsc{{\Huge Your Name}}
- \vspace*{\fill}
+% Header block: name on the left, contact on the right, teal rule underneath.
+\begin{minipage}[t]{0.55\textwidth}
+  \vspace*{\fill}
+  \textsc{{\Huge Your Name}}
+  \vspace*{\fill}
 \end{minipage}\hfill
-\begin{minipage}[t]{0.3\textwidth}
- \setlength{\baselineskip}{15pt}
- \RaggedLeft
- \faMobile{} 123-456-7890\\
- \faHome{} City, State\\
- \faEnvelope{} you@example.com\\
- \faLinkedin{} in/yourprofile
+\begin{minipage}[t]{0.4\textwidth}
+  \setlength{\baselineskip}{15pt}
+  \RaggedLeft
+  \faMobile{} 123-456-7890\\
+  \faHome{} City, State\\
+  \faEnvelope{} you@example.com\\
+  \faLinkedin{} in/yourprofile
 \end{minipage}
 
+\vspace{8pt}
 {\color{cvteal} \rule{\linewidth}{1mm}}
+\vspace{14pt}
 
-\begin{minipage}[t]{\textwidth}
+% Date
+\noindent Month DD, YYYY
 
- \begin{letter}{Hiring Manager\\Company Name\\City, State}
-\setlength{\parskip}{5pt}
-\setlength{\baselineskip}{15pt}
- \opening{Dear Hiring Manager,}
+\vspace{10pt}
 
- \begin{center}{\textbf{Position:} \underline{Job Title}}\end{center}
+% Recipient
+\noindent Hiring Manager \\
+Company Name \\
+City, State
 
-\setlength{\parskip}{20pt}
+\vspace{14pt}
+
+\noindent Dear Hiring Manager,
+
+\begin{center}{\textbf{Position:} \underline{Job Title}}\end{center}
+
+% Body formatting. parskip sets inter-paragraph space; adjust if the letter
+% runs long and needs to stay on one page, or short and wants more breathing.
+\setlength{\parskip}{8pt}
+\setlength{\baselineskip}{14pt}
 
 \justifying{
- Opening paragraph: Connect your background to this specific role and company. Reference the job title and 1-2 things that make this role compelling. 3-4 sentences.
+Opening paragraph: Connect your background to this specific role and company. Reference the job title and 1-2 things that make this role compelling. 3-4 sentences.
 
- Body paragraph 1: Highlight 2-3 specific accomplishments from the master career document most relevant to this role. Use concrete details. 3-4 sentences.
+Body paragraph 1: Highlight 2-3 specific accomplishments from the master career document most relevant to this role. Use concrete details. 3-4 sentences.
 
- Body paragraph 2: Address a specific requirement or challenge from the job description. Connect your experience directly to it. 3-4 sentences.
+Body paragraph 2: Address a specific requirement or challenge from the job description. Connect your experience directly to it. 3-4 sentences.
 
- Closing paragraph: Express genuine interest, reference next steps, thank them for consideration. 2-3 sentences.
+Closing paragraph: Express genuine interest, reference next steps, thank them for consideration. 2-3 sentences.
 }
-\end{letter}
-\end{minipage}
 
-\vspace*{\fill}
-{\color{cvteal} \rule{\linewidth}{1mm}}
+\vspace{12pt}
 
-Yours sincerely,\\\textbf{Your Name}
+\noindent Respectfully,
 
-\vspace*{\fill}
-{\color{cvteal} \rule{\linewidth}{1mm}}
+\vspace{22pt}
+
+\noindent \textbf{Your Name}
+
 \end{document}

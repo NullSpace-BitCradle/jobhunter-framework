@@ -101,7 +101,14 @@ If no duplicate is found, proceed straight to Step 4.
 
 Read `<applications_file>`. If it does not exist, create it by copying `applications.template.md` from the framework repo root, then proceed.
 
-Append a new row to the table:
+The tracker has two tables with identical columns:
+
+- `## Applications` - everything you actually submitted (any status except `declined_anti_target`).
+- `## Declined (anti-target, not submitted)` - roles `/apply` refused to tailor due to an anti-target match.
+
+If the file was created before this split and has no `## Declined` section, add one at the bottom using the same header as the main table (see `applications.template.md`) before appending any declined row.
+
+Append a new row with these values:
 
 | Column | Value |
 |---|---|
@@ -115,7 +122,12 @@ Append a new row to the table:
 | URL | source URL |
 | Notes | stretch-fit reason, refusal reason, or blank |
 
-Preserve all existing rows untouched. Append at the top of the table (newest first) unless the existing file is clearly ordered oldest-first, in which case append at the bottom.
+**Row routing:**
+
+- Status `declined_anti_target` → append under the `## Declined (anti-target, not submitted)` table.
+- Any other status (`queued`, etc.) → append under the `## Applications` table.
+
+Preserve all existing rows untouched. Append at the top of the target table (newest first) unless the existing file is clearly ordered oldest-first, in which case append at the bottom. Never mix a declined row into the main Applications table, and never promote a declined row out of the Declined section.
 
 ## Step 5 - Report
 

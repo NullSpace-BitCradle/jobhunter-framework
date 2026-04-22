@@ -353,7 +353,7 @@ Use the actual filename from the output naming convention in Step 4 or Step 5 - 
  cd <output_dir> && pdflatex Resume-Name-Company-Role.tex && pdflatex Resume-Name-Company-Role.tex
  ```
 
- **Cover letter** - use `xelatex` (required). The letter document class forces pdfLaTeX to render body text as Type 3 bitmap fonts, which breaks ATS ligature extraction (pdftotext sees "Staff" as "Sta", "findings" as "ndings"). xelatex + fontspec gives scalable Charter with proper ToUnicode mapping:
+ **Cover letter** - use `xelatex` (required). The cover letter template uses `fontspec` + `\setmainfont{Bitstream Charter}`, which only compiles under xelatex or lualatex. This also gives scalable Charter with proper ToUnicode mapping so pdftotext and ATS parsers extract real words rather than mangled ligatures ("Staff" vs "Sta", "findings" vs "ndings"). The template itself is article-class, not letter-class, so it flows as a single-page business letter without the forced page break letter-class imposes at `\opening`.
  ```bash
  cd <output_dir> && xelatex CoverLetter-Name-Company-Role.tex && xelatex CoverLetter-Name-Company-Role.tex
  ```

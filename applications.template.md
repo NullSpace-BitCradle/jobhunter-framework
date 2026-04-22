@@ -19,5 +19,14 @@ Hand edits are welcome - the format is plain markdown so any editor works.
 
 ## Applications
 
+Active and resolved applications you actually submitted. Rows stay here through every status except `declined_anti_target`, which gets its own section below so this table only shows roles you engaged with.
+
+| Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |
+|---|---|---|---|---|---|---|---|---|
+
+## Declined (anti-target, not submitted)
+
+Roles `/apply` refused to tailor due to an MCD anti-target match. Kept as a durable skip list so discovery never resurfaces them, and to document why each was passed over. Columns match the main table exactly. Do not promote rows out of this section - a declined row means the framework declined to submit.
+
 | Date Applied | Company | Role | Status | Last Update | Score | Files | URL | Notes |
 |---|---|---|---|---|---|---|---|---|

@@ -1,19 +1,18 @@
 # jobhunter-framework
 
-A self-hosted job-hunting workbench built on [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Owns the full pipeline: career intake, role discovery across ATS platforms and job boards, tailored resume and cover letter generation with a hard zero-fabrication policy, and end-to-end application tracking.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) job-hunting workbench. Covers the full pipeline: career intake, role discovery across ATS platforms and job boards, tailored resume and cover letter generation with a hard zero-fabrication policy, and end-to-end application tracking.
 
 Built for senior and principal IC candidates who care more about signal than volume, and who would rather spend tailoring budget on the three right roles than spray-and-pray at fifty.
 
 ## What makes this different
 
-Most AI resume tools will happily fabricate metrics, reshape you into a role you have never held, or quietly pad the summary with plausible-sounding claims. This framework refuses to do any of that.
-
-- **Zero fabrication.** The resume writer only uses content that is explicitly in your Master Career Document. If a metric is not in the MCD, it does not appear in the output. No approximations, no proxy numbers, no "estimate conservatively."
-- **Lane-fit assessment before tailoring.** Every generation run scores the job against your MCD's positioning lanes. Stretch fits get a warning you have to confirm. Anti-target lanes (roles you should not apply to) get blocked entirely.
-- **Crown-jewel awareness.** Your MCD can flag one or more verifiable, differentiated achievements that only you can credibly claim. For principal- and staff-tier applications, the resume writer enforces crown-jewel placement in the summary paragraph.
-- **Summary authenticity guard.** The opening line of your summary must match a role you have genuinely held or performed. No inventing a "Staff AppSec Engineer with 10 years of experience" if you have never held that title.
-- **Owned data.** Your MCD, job descriptions, generated resumes, and application tracker all live in a user-data directory outside the repo. The repo is code only.
-- **Auditable, durable state.** Applications, statuses, and interviews live in a plain-markdown file you can grep, version, or edit by hand. No proprietary database, no vendor lock-in.
+- **Writes only from verified content.** Every line in the resume and cover letter comes from your Master Career Document. If a metric is not in the MCD, it is not in the output.
+- **Scores lane fit before tailoring.** Each generation run rates the target job against your MCD's positioning lanes. Stretch fits require explicit confirmation; anti-target lanes block generation entirely.
+- **Enforces crown-jewel placement.** Your MCD flags verifiable, differentiated achievements only you can credibly claim. The writer places those in the summary paragraph for principal- and staff-tier roles.
+- **Anchors the summary to roles you have held.** The opening title maps to a role you have genuinely held or performed. No inventing a "Staff AppSec Engineer with 10 years of experience" where no such history exists.
+- **Keeps your data out of the repo.** Your MCD, job descriptions, generated materials, and application tracker live in a user-data directory. The repo stays code-only.
+- **Plain-markdown state you can grep.** Applications, statuses, and interview notes live in a human-readable tracker you can search, version, or hand-edit with any tool.
+- **Hyphens only, everywhere.** Every generated file uses single hyphens - no em-dashes, en-dashes, or typographic double-hyphens. This keeps output consistent across job boards, PDF readers, and ATS parsers that render Unicode dashes unpredictably.
 
 ## Components
 
@@ -50,7 +49,7 @@ The framework separates code (this repo) from personal data (your user-data dire
   discovery/                        # Python scanner
     main.py, dedup.py
     scrapers/                       # 6 scrapers (5 ATS + JobSpy)
-    tests/                          # 73 tests
+    tests/
     config/*.example.yaml           # tracked examples
   templates/                        # LaTeX resume + cover letter
   config.example.yaml               # framework config template
@@ -60,31 +59,15 @@ A `config.yaml` at the repo root (gitignored) maps the framework at every user-d
 
 ## Quickstart
 
-### 1. Install prerequisites
+### 1. Prerequisites
+
+You need:
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - Python 3.10+ (required by python-jobspy)
-- LaTeX with the following TeX Live collections (beyond base `texlive-latex-base`):
-  - `texlive-latex-recommended` provides `ragged2e`, `microtype`
-  - `texlive-latex-extra` provides `tabularx`, `enumitem`, `titlesec`
-  - `texlive-fonts-extra` provides `fontawesome5`, `CormorantGaramond`, `charter`
+- LaTeX (for resume and cover letter PDF compilation)
 
-Debian / Ubuntu / WSL:
-
-```bash
-sudo apt-get install texlive-latex-base texlive-latex-recommended \
-  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra
-```
-
-macOS:
-
-```bash
-brew install --cask mactex-no-gui
-```
-
-Cover letters compile with `xelatex` (required for ATS ligature extraction). Both `pdflatex` and `xelatex` ship with all the bundles above.
-
-If `pdflatex` complains about a missing `.sty` file, install the individual package via `tlmgr install <pkg>` or `tlmgr --usermode install <pkg>` (no root required).
+If you already have a working LaTeX install with `pdflatex` and `xelatex` available, skip ahead to step 2. Otherwise, LaTeX install commands and the required TeX Live collections are in [Detailed setup: LaTeX](#detailed-setup-latex) at the bottom of this README.
 
 ### 2. Clone and configure
 
@@ -199,22 +182,26 @@ Build the MCD once. Maintain it as a living document. Update it when you take a 
 
 ## Application tracker
 
-Every application lives as a row in `applications.md`. The status column moves forward along:
+Every application lives as a row in `applications.md`. The file holds two tables with identical columns:
+
+- `## Applications` - everything you actually submitted. Every status except `declined_anti_target` lives here.
+- `## Declined (anti-target, not submitted)` - roles `/apply` refused to tailor. Kept so discovery skips them but pulled out of the main view so you can see what you are actually working with.
+
+The status column in the main table moves forward along:
 
 ```
 queued -> applied -> ack -> screen -> interview -> offer | rejected | withdrew
 ```
 
-Plus two terminal states:
+Plus one terminal state that lives only in the Declined table:
 - `declined_anti_target` - framework refused to tailor for an anti-target lane
-- `withdrew` - you pulled the application
 
-`/apply` appends rows as `queued` (generated but not submitted). Rows move forward through:
+`/apply` appends rows as `queued` to the main table (or to the Declined table if Step 3 refused). Rows move forward through:
 - `/submitted <company>` - manual flip after submitting through the portal
-- `/triage` - detects ack, screen, interview, or rejection mail and fast-forwards the row accordingly (status regression is blocked; `ack` rows cannot go back to `queued`)
+- `/triage` - detects ack, screen, interview, or rejection mail and fast-forwards the row accordingly (status regression is blocked; `ack` rows cannot go back to `queued`; declined rows are never touched)
 - Hand-edits - it is plain markdown, edit freely
 
-The discovery scanner uses rows with terminal status (`rejected`, `withdrew`, `declined_anti_target`) as a durable skip list, so roles you have already declined will not resurface even if the state file gets cleared.
+The discovery scanner uses rows with terminal status (`rejected`, `withdrew`, `declined_anti_target`) as a durable skip list, scanning both tables, so roles you have already declined will not resurface even if the state file gets cleared.
 
 ## Discovery details
 
@@ -360,7 +347,7 @@ Before generating anything, the `ats-resume-writer` agent runs a gated sequence:
 5. **Summary Authenticity.** The opening title or descriptor in the summary must map to a role the user has genuinely held. If no authentic framing fits both the JD and the MCD, that is a signal the lane is a stretch and generation returns to step 3.
 6. **Founding Employee surfacing.** For principal/staff/senior-tier applications, the founding-employee narrative (if present in the MCD) appears in the summary or early experience.
 
-Then generation proceeds: LaTeX with the template's commands, all interpolated values escaped, hyphens only (no em-dashes, en-dashes, or typographic double-hyphens), compiled with `pdflatex` for the resume and `xelatex` for the cover letter. Auxiliary files are cleaned up; only `.tex` and `.pdf` remain.
+Then generation proceeds: LaTeX with the template's commands, all interpolated values escaped, compiled with `pdflatex` for the resume and `xelatex` for the cover letter. The cover letter template uses `article` class rather than `letter` class so the header, body, and signature all flow on one page without the letter-class forced page break at `\opening` (xelatex is still required because the template uses `fontspec` + `\setmainfont{Bitstream Charter}` for ATS-grade ToUnicode mapping). The hyphens-only policy (see [What makes this different](#what-makes-this-different)) is enforced at the escape layer so no Unicode dashes reach the output. Auxiliary files are cleaned up; only `.tex` and `.pdf` remain.
 
 ## Development
 
@@ -372,7 +359,7 @@ source venv/bin/activate
 python -m pytest tests/ -v
 ```
 
-73 tests cover all 6 scrapers (mocked), filter and scoring logic, state management, digest writing, cross-source deduplication, and JobSpy field mapping.
+238 tests cover all 6 scrapers (mocked), filter and scoring logic, state management, digest writing, cross-source deduplication, URL canonicalization, ingest filter rejection reasons (including local on-site allow-regex short-circuit), tracker parsing across the two-table Applications/Declined layout, and JobSpy field mapping.
 
 ### Project layout
 
@@ -400,7 +387,7 @@ jobhunter-framework/
 │   │   ├── workable.py
 │   │   └── jobspy.py                # LinkedIn / Indeed / Glassdoor aggregator
 │   ├── config/                      # tracked .example.yaml files
-│   └── tests/                       # 73 tests
+│   └── tests/
 ├── templates/
 │   ├── resume-template.tex
 │   └── cover-letter-template.tex
@@ -416,8 +403,44 @@ jobhunter-framework/
 - [x] Phase 2: unified config, `config.yaml`-driven paths, user-data separation
 - [x] Phase 3: orchestration commands and applications tracker
 - [x] Phase 3.5: job board aggregation (LinkedIn via JobSpy) and cross-source dedup
-- [ ] Phase 4: agent paths entirely config-driven (no symlinks), expanded test coverage, Workday support, public release polish
+- [ ] Phase 4: agent paths entirely config-driven (remove remaining hardcoded symlinks)
+- [ ] Phase 5: Workday ATS support (the largest current gap in ATS coverage; many enterprise postings live here)
+- [ ] Phase 6: expanded test coverage (integration tests against recorded ATS fixtures, end-to-end slash-command flows)
+- [ ] Phase 7: public release polish (annotated screenshots, worked examples, getting-started tour)
+
+## Detailed setup: LaTeX
+
+If you do not already have a working LaTeX install, here is what the framework needs.
+
+Required TeX Live collections beyond base `texlive-latex-base`:
+
+- `texlive-latex-recommended` provides `ragged2e` and `microtype`
+- `texlive-latex-extra` provides `tabularx`, `enumitem`, and `titlesec`
+- `texlive-fonts-extra` provides `fontawesome5`, `CormorantGaramond`, and `charter`
+
+Debian / Ubuntu / WSL:
+
+```bash
+sudo apt-get install texlive-latex-base texlive-latex-recommended \
+  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra
+```
+
+macOS:
+
+```bash
+brew install --cask mactex-no-gui
+```
+
+Both `pdflatex` (for the resume) and `xelatex` (for the cover letter) ship with those bundles. The cover letter template uses `fontspec` + `\setmainfont{Bitstream Charter}`, which is why `xelatex` is required for it specifically.
+
+If `pdflatex` complains about a missing `.sty` file on first compile, install the individual package via `tlmgr install <pkg>` or `tlmgr --usermode install <pkg>` (no root required).
 
 ## License
 
-MIT for the code in this repository. The LaTeX resume template is CC-BY-4.0, based on work by Michael Lustfield. See [LICENSE](LICENSE) for details.
+- Code in this repository (Python scanners, slash commands, tests, agent prompts, documentation, templates authored for this project): MIT.
+- Agent prompts under `.claude/agents/` and `.claude/commands/` are treated as software for licensing purposes and fall under the same MIT grant as the code.
+- The LaTeX resume template (`templates/resume-template.tex`) is CC-BY-4.0, based on work by Michael Lustfield. The cover letter template (`templates/cover-letter-template.tex`) was authored for this project and is MIT.
+- Example config files (`*.example.yaml`, `applications.template.md`) are MIT.
+- Your personal content (Master Career Document, job descriptions, generated resumes and cover letters, application tracker) lives outside the repo per the user-data separation. Those files are yours; no license from this repository applies to them.
+
+See [LICENSE](LICENSE) for the MIT text.
