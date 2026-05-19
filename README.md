@@ -329,7 +329,7 @@ Board-source matches (LinkedIn/Indeed/Glassdoor) from companies NOT already in y
 
 Example digest output for a surfaced candidate:
 
-```markdown
+````markdown
 ### Foo Labs
 - **Matches:** 4 | **Cumulative score:** 58
 - **First seen:** 2026-04-01 | **Last seen:** 2026-04-17
@@ -340,7 +340,7 @@ Example digest output for a surfaced candidate:
     slug: foolabs
   ```
 - **Sample roles:** Staff Security Engineer; Principal VM Engineer; Senior Detection Engineer
-```
+````
 
 This converts passive JobSpy scraping into an active feed of companies worth promoting to direct-ATS scraping, with zero manual slug hunting when the URL resolves cleanly. Companies whose LinkedIn posts use Easy Apply (no external URL) still get tracked by match count but need manual ATS identification.
 
