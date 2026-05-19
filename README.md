@@ -2,7 +2,7 @@
 
 **Tailor three resumes instead of spamming fifty, and have a tracker that actually tells you the truth at the end of the week.**
 
-> Status: **beta, v0.1.0** - released as-is. Issues welcome, no commitment to response time. Use at your own risk; see [Responsible use](#responsible-use) before running discovery.
+> Status: **beta, v0.1.0** - released as-is. Issues welcome, no commitment to response time. Use at your own risk; see [Responsible use](#responsible-use) before running discovery, and [docs/known-limitations.md](docs/known-limitations.md) for the rough edges you will probably hit.
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) job-hunting workbench. Covers the full pipeline: career intake, role discovery across ATS platforms and job boards, tailored resume and cover letter generation with a hard zero-fabrication policy, and end-to-end application tracking.
 
@@ -505,6 +505,10 @@ If `pdflatex` complains about a missing `.sty` file on first compile, install th
 - Your personal content (Master Career Document, job descriptions, generated resumes and cover letters, application tracker) lives outside the repo per the user-data separation. Those files are yours; no license from this repository applies to them.
 
 See [LICENSE](LICENSE) for the MIT text and [NOTICE](NOTICE) for third-party attributions.
+
+## Related repositories
+
+- [ats-resume-agent](https://github.com/NullSpace-BitCradle/ats-resume-agent) - the resume / cover letter generation agent. Bundled here as `.claude/agents/ats-resume-writer.md` and used by `/apply`; the standalone repo is for users who want only the resume writer without the discovery / tracker layer.
 
 ## Contributing
 
