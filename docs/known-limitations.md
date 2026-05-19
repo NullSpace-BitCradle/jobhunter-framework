@@ -26,7 +26,7 @@ See the README's [Responsible use](../README.md#responsible-use) section for the
 
 ## No Workday support
 
-Workday-hosted job boards (`*.myworkdayjobs.com`) are not in scope for v0.1.0. The Workday public surface is not API-shaped and would need a separate scraper design. Many enterprise companies post exclusively on Workday, so this is a real coverage gap.
+Workday-hosted job boards (`*.myworkdayjobs.com`) are not yet supported. The Workday public surface is not API-shaped and would need a separate scraper design. Many enterprise companies post exclusively on Workday, so this is a real coverage gap.
 
 **Workaround:** use `/ingest` with the Workday URL to feed the role through the same filter / score / tailoring pipeline. The framework will not auto-discover Workday postings, but you can apply through it manually.
 

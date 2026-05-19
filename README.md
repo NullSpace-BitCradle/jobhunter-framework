@@ -2,7 +2,7 @@
 
 **Tailor three resumes instead of spamming fifty, and have a tracker that actually tells you the truth at the end of the week.**
 
-> Status: **beta, v0.1.0** - released as-is. Issues welcome, no commitment to response time. Use at your own risk; see [Responsible use](#responsible-use) before running discovery, and [docs/known-limitations.md](docs/known-limitations.md) for the rough edges you will probably hit.
+> Status: **beta, released as-is.** Main is the truth - clone or `git pull` for the latest. No versioned releases; this is a Claude Code framework distributed as source, not a packaged library. Issues welcome, no commitment to response time. Use at your own risk; see [Responsible use](#responsible-use) before running discovery, and [docs/known-limitations.md](docs/known-limitations.md) for the rough edges you will probably hit.
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) job-hunting workbench. Covers the full pipeline: career intake, role discovery across ATS platforms and job boards, tailored resume and cover letter generation with a hard zero-fabrication policy, and end-to-end application tracking.
 
@@ -450,7 +450,7 @@ jobhunter-framework/
 
 ## Roadmap
 
-Shipped in v0.1.0:
+What works today:
 
 - [x] Scaffold with code / personal-content separation
 - [x] Unified `config.yaml` driving every path
@@ -464,8 +464,7 @@ Planned, no committed date:
 
 - [ ] Workday ATS support (largest current gap; many enterprise postings live there)
 - [ ] Expanded integration tests (recorded ATS fixtures, end-to-end command flows)
-- [ ] Annotated screenshots, worked examples, getting-started tour (deferred to v0.2)
-- [ ] CHANGELOG (deferred to v0.2)
+- [ ] Annotated screenshots, worked examples, getting-started tour
 
 If a gap blocks your use, open an issue describing the role you wanted to pursue and the surface that failed. PRs welcome.
 
