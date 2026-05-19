@@ -5,6 +5,13 @@ from pathlib import Path
 
 import pytest
 
+# Recent dates computed relative to test execution time so tests do not
+# decay out of the default 30-day backfill window. _RECENT is "yesterday",
+# _RECENT_PLUS_ONE is "two days ago". Both stay inside any reasonable
+# days= window the tests pass to run_backfill.
+_RECENT = (date.today() - timedelta(days=1)).isoformat()
+_RECENT_PLUS_ONE = (date.today() - timedelta(days=2)).isoformat()
+
 from main import (
     parse_digest_matches,
     load_tracker_urls,
@@ -99,7 +106,7 @@ def _tracker(tmp_path: Path, rows: list[dict]) -> Path:
 
 class TestParseDigestMatches:
     def test_captures_all_tier_jobs(self, tmp_path):
-        path = _write(tmp_path / "digest-2026-04-14.md", SAMPLE_DIGEST)
+        path = _write(tmp_path / f"digest-{_RECENT}.md", SAMPLE_DIGEST)
         entries = parse_digest_matches(path, date(2026, 4, 14))
         assert len(entries) == 3
         companies = [e["company"] for e in entries]
@@ -237,7 +244,7 @@ class TestRunBackfill:
     def test_surfaces_matched_jobs_not_in_tracker(self, tmp_path):
         digest_dir = tmp_path / "digests"
         digest_dir.mkdir()
-        _write(digest_dir / "digest-2026-04-14.md", SAMPLE_DIGEST)
+        _write(digest_dir / f"digest-{_RECENT}.md", SAMPLE_DIGEST)
 
         # Tracker has Wiz but NOT Tenable or Datadog
         tracker = _tracker(tmp_path, [
@@ -258,7 +265,7 @@ class TestRunBackfill:
         """Digest has LinkedIn URL, tracker has ATS URL - same role should be excluded."""
         digest_dir = tmp_path / "digests"
         digest_dir.mkdir()
-        _write(digest_dir / "digest-2026-04-14.md", SAMPLE_DIGEST)
+        _write(digest_dir / f"digest-{_RECENT}.md", SAMPLE_DIGEST)
 
         # Tracker has Datadog with a DIFFERENT URL than the digest (which has LinkedIn).
         # Pure URL match would miss this, but (company, title) match catches it.
@@ -307,7 +314,7 @@ class TestRunBackfill:
     def test_score_filters(self, tmp_path):
         digest_dir = tmp_path / "digests"
         digest_dir.mkdir()
-        _write(digest_dir / "digest-2026-04-14.md", SAMPLE_DIGEST)
+        _write(digest_dir / f"digest-{_RECENT}.md", SAMPLE_DIGEST)
 
         # max_score=15 should exclude Wiz (25) and Tenable (18), keep Datadog (12)
         rc = run_backfill(digest_dir, None, days=30, limit=10, max_score=15)
@@ -338,8 +345,8 @@ class TestRunBackfill:
 - **Score:** 15
 - **Apply:** https://boards.greenhouse.io/foo/jobs/1
 """
-        _write(digest_dir / "digest-2026-04-14.md", d1)
-        _write(digest_dir / "digest-2026-04-15.md", d2)
+        _write(digest_dir / f"digest-{_RECENT}.md", d1)
+        _write(digest_dir / f"digest-{_RECENT_PLUS_ONE}.md", d2)
 
         rc = run_backfill(digest_dir, None, days=30, limit=10)
         assert rc == 0
@@ -375,7 +382,7 @@ class TestRunBackfill:
 - **Score:** 10
 - **Apply:** https://www.linkedin.com/jobs/view/42?trk=session_b&utm_source=news
 """
-        _write(digest_dir / "digest-2026-04-14.md", digest)
+        _write(digest_dir / f"digest-{_RECENT}.md", digest)
 
         tracker = _tracker(tmp_path, [
             {"company": "Foo", "role": "Role", "status": "applied",
@@ -406,7 +413,7 @@ class TestRunBackfill:
 - **Score:** 11
 - **Apply:** https://www.linkedin.com/jobs/view/4400307556
 """
-        _write(digest_dir / "digest-2026-04-17.md", digest)
+        _write(digest_dir / f"digest-{_RECENT}.md", digest)
 
         # Tracker rows have bare titles AND different (ATS) URLs - both layers
         # of the dedup must work together.
