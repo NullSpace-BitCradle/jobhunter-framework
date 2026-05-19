@@ -458,10 +458,10 @@ Shipped in v0.1.0:
 - [x] Plain-markdown applications tracker with 4-section state machine
 - [x] Job-board aggregation (LinkedIn / Indeed / Glassdoor / Google / ZipRecruiter via JobSpy) and cross-source dedup
 - [x] Title-suffix normalization for backfill (collapses `(remote)` / `- Remote` variants of the same role)
+- [x] Agent paths entirely config-driven (slash commands self-locate via `git rev-parse --show-toplevel`; agent prompts resolve repository root explicitly before reading `config.yaml`)
 
 Planned, no committed date:
 
-- [ ] Agent paths entirely config-driven (remove remaining hardcoded symlinks)
 - [ ] Workday ATS support (largest current gap; many enterprise postings live there)
 - [ ] Expanded integration tests (recorded ATS fixtures, end-to-end command flows)
 - [ ] Annotated screenshots, worked examples, getting-started tour (deferred to v0.2)

@@ -83,7 +83,7 @@ Or let `mktemp` pick a path: `TMPFILE=$(mktemp --suffix=.json)`.
 Execute from the discovery venv:
 
 ```bash
-cd <repo>/discovery && source venv/bin/activate && python main.py --ingest "$TMPFILE"
+cd "$(git rev-parse --show-toplevel)/discovery" && source venv/bin/activate && python main.py --ingest "$TMPFILE"
 ```
 
 Capture stdout. The script writes a timestamped `ingest-YYYY-MM-DD-HHMMSS.md` digest to `<discovery.digest_dir>` and prints a summary line like:

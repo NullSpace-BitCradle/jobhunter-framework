@@ -19,10 +19,10 @@ If missing, fall back to `discovery/output/` at the repo root.
 
 ## Step 2 - Run the scanner
 
-Execute from the framework repo:
+Execute the scanner (self-locating - works from any cwd inside the repo):
 
 ```bash
-cd discovery && source venv/bin/activate && python main.py $ARGUMENTS
+cd "$(git rev-parse --show-toplevel)/discovery" && source venv/bin/activate && python main.py $ARGUMENTS
 ```
 
 Stream stdout so the user sees progress. If the user passed `--verify` or `--dry-run`, those get forwarded through and you should NOT try to summarize a digest afterward (verify produces no digest; dry-run may still produce one but the user is just sanity-checking).

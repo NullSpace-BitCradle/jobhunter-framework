@@ -39,7 +39,7 @@ If `config.yaml` is missing, fall back to `discovery/output/` and `applications.
 Execute from the discovery venv:
 
 ```bash
-cd <repo>/discovery && source venv/bin/activate && python main.py --backfill $ARGUMENTS
+cd "$(git rev-parse --show-toplevel)/discovery" && source venv/bin/activate && python main.py --backfill $ARGUMENTS
 ```
 
 The script writes a timestamped `backfill-YYYY-MM-DD-HHMMSS.md` to `<discovery.digest_dir>` and prints a summary line like:

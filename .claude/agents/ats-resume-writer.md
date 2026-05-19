@@ -59,11 +59,11 @@ These rules are absolute and override everything else in this prompt:
 
 ## Step 0: Resolve Paths
 
-Before reading source files, check for a `config.yaml` at the project root. If it exists, read it and expand `~` to the user's home directory in all paths. Use these fields:
+Before reading source files, locate the repository root by running `git rev-parse --show-toplevel` from the current working directory. Check for a `config.yaml` at that path. If it exists, read it and expand `~` to the user's home directory in all paths. Use these fields:
 
-- **`mcd_path`** - where to find the Master Career Document (default if absent: `Master_Career_Document.md` in the project root)
-- **`jd_dir`** - directory containing Job Description files (default: the project root)
-- **`output_dir`** - where to write generated `.tex` and compiled `.pdf` files (default: `output/` in the project root)
+- **`mcd_path`** - where to find the Master Career Document (default if absent: `Master_Career_Document.md` at the repository root)
+- **`jd_dir`** - directory containing Job Description files (default: the repository root)
+- **`output_dir`** - where to write generated `.tex` and compiled `.pdf` files (default: `output/` at the repository root)
 
 If `config.yaml` is absent, use the defaults. If it exists but a field is missing, use the default for that field. Store the resolved paths for use throughout this workflow.
 

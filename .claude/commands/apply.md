@@ -29,7 +29,7 @@ The user's input is one of:
 **A URL** - before WebFetch, check the board-descriptions cache at `<discovery.state_file parent>/board-descriptions.json` (default: `~/JobHunt/discovery/state/board-descriptions.json`). `/discover` persists JD bodies here for every LinkedIn / Indeed / Glassdoor posting it pulls via JobSpy. Compare the submitted URL's canonical form against cache keys. To canonicalize, run:
 
 ```bash
-cd <repo>/discovery && source venv/bin/activate && python main.py --normalize-url "<url>"
+cd "$(git rev-parse --show-toplevel)/discovery" && source venv/bin/activate && python main.py --normalize-url "<url>"
 ```
 
 If the normalized URL has a cache hit, use the cached `description`, `company`, `title`, `location`, and `posted_at` fields directly instead of WebFetch. This avoids LinkedIn 403s and rate limits on URLs the scanner has already fetched. Cached entries are pruned after 60 days, so very old digest URLs will still require WebFetch. Only fall back to WebFetch if the cache misses.
@@ -85,7 +85,7 @@ Output files land in `<output_dir>` following the naming convention:
 Before logging, scan the existing `<applications_file>` for any row whose URL column matches the source URL. Compare using the canonical form - tracking parameters (`?utm_source=...`, `?trk=...`, `?refId=...`) vary between sessions and must not defeat the match. To get a canonical form for comparison, run:
 
 ```bash
-cd <repo>/discovery && source venv/bin/activate && python main.py --normalize-url "<url>"
+cd "$(git rev-parse --show-toplevel)/discovery" && source venv/bin/activate && python main.py --normalize-url "<url>"
 ```
 
 Do this for both the incoming URL (from Step 2) and each candidate row's URL (strip markdown auto-link wrappers `<url>` and `[text](url)` first). Also match on exact `Company + Role` even if the URL differs, since the same role can be re-posted at a new URL.

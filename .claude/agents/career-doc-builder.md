@@ -52,7 +52,7 @@ These rules are absolute and override everything else in this prompt:
 
 ### Resolve MCD Path
 
-Check for a `config.yaml` at the project root. If it exists, read the `mcd_path` field (expanding `~` to the user's home directory). This is where the Master Career Document lives. If `config.yaml` is absent or `mcd_path` is not set, default to `Master_Career_Document.md` in the project root.
+Locate the repository root by running `git rev-parse --show-toplevel` from the current working directory. Check for a `config.yaml` at that path. If it exists, read the `mcd_path` field (expanding `~` to the user's home directory). This is where the Master Career Document lives. If `config.yaml` is absent or `mcd_path` is not set, default to `Master_Career_Document.md` at the repository root.
 
 ### Determine Mode
 
@@ -282,7 +282,7 @@ Present the complete MCD for review (or a section-by-section summary if it's ver
 Make requested changes.
 
 ### 5. Output
-- Write the final file to the `mcd_path` resolved in "Before You Begin." If no config path was set, write to the project root as `Master_Career_Document.md`.
+- Write the final file to the `mcd_path` resolved in "Before You Begin." If no config path was set, write to the repository root as `Master_Career_Document.md`.
 - If a file already exists at that path, confirm before overwriting: "There's already a Master Career Document at [path]. Want me to overwrite it, or save to a different filename?"
 - The output path is already gitignored to prevent accidentally committing personal information.
 
