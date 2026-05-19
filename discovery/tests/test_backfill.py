@@ -194,7 +194,7 @@ class TestLoadTrackerIdentityKeys:
             {"company": "Acme Lending", "role": "Director of Security Operations",
              "status": "ack", "url": "<https://jobs.lever.co/AcmeLending/abc>"},
             {"company": "Globex Streaming", "role": "Security Engineer (L4)",
-             "status": "ack", "url": "<https://globex streaming.com/jobs/123>"},
+             "status": "ack", "url": "<https://globexstreaming.com/jobs/123>"},
         ])
         urls, pairs = load_tracker_identity_keys(tracker)
         assert "https://jobs.lever.co/AcmeLending/abc" in urls
@@ -386,6 +386,42 @@ class TestRunBackfill:
         assert rc == 0
         content = list(digest_dir.glob("backfill-*.md"))[0].read_text()
         assert "Foo" not in content  # URL normalization caught the match
+
+    def test_title_suffix_drift_matching(self, tmp_path):
+        """Tracker has bare title ('Senior GRC Security Analyst'); digest has the
+        same role with a work-arrangement suffix ('Senior GRC Security Analyst (remote)'
+        or 'Director, IT Security & Compliance - Remote'). Backfill must fold these
+        through normalize_title and exclude both."""
+        digest_dir = tmp_path / "digests"
+        digest_dir.mkdir()
+        digest = """# D
+
+## tier_1_saas
+
+### Acme Health - Senior GRC Security Analyst (remote)
+- **Score:** 15
+- **Apply:** https://www.linkedin.com/jobs/view/4391183156
+
+### Globex Wellness - Director, IT Security & Compliance - Remote
+- **Score:** 11
+- **Apply:** https://www.linkedin.com/jobs/view/4400307556
+"""
+        _write(digest_dir / "digest-2026-04-17.md", digest)
+
+        # Tracker rows have bare titles AND different (ATS) URLs - both layers
+        # of the dedup must work together.
+        tracker = _tracker(tmp_path, [
+            {"company": "Acme Health", "role": "Senior GRC Security Analyst", "status": "ack",
+             "url": "<https://myjobs.adp.com/acmehealthcareers/cx/job-details?reqId=5001185894306>"},
+            {"company": "Globex Wellness", "role": "Director, IT Security & Compliance", "status": "ack",
+             "url": "<https://globexwellness.wd1.myworkdayjobs.com/en-US/GlobexWellness_Careers/job/Anywhere/Director--IT-Security---Compliance---Remote_R-101803>"},
+        ])
+
+        rc = run_backfill(digest_dir, tracker, days=30, limit=10)
+        assert rc == 0
+        content = list(digest_dir.glob("backfill-*.md"))[0].read_text()
+        assert "Acme Health" not in content  # title-suffix normalization caught it
+        assert "Globex Wellness" not in content
 
 
 # ---------------------------------------------------------------------------

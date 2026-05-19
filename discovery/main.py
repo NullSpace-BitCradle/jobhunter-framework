@@ -241,11 +241,13 @@ def load_tracker_identity_keys(
             normalized = normalize_url(url)
             if normalized:
                 urls.add(normalized)
-            # Company + Role pair
+            # Company + Role pair (title normalized to fold regional/work-arrangement
+            # suffixes like " - Remote" or "(remote)" so backfill can match the bare
+            # tracker title against suffix-decorated digest variants of the same role).
             company = cells[company_idx]
             role = cells[role_idx]
             if company and role:
-                pairs.add((normalize_company(company), role.lower().strip()))
+                pairs.add((normalize_company(company), normalize_title(role)))
     except Exception as e:
         logging.warning("Could not parse applications tracker %s: %s", applications_file, e)
     return urls, pairs
@@ -574,9 +576,32 @@ def score_job(job: Job, scoring: dict) -> int:
     return score
 
 
+_LOC_ARRANGEMENT_PARENS = re.compile(
+    r"\s*\([^)]*\b(?:remote|hybrid|onsite|on-site|"
+    r"usa|us|united states|americas|emea|apac|na|"
+    r"east coast|west coast|north america|"
+    r"est|pst|cst|mst|edt|pdt|cdt|mdt)\b[^)]*\)",
+    re.IGNORECASE,
+)
+
+
 def normalize_title(title: str) -> str:
-    """Collapse regional variants by taking the title chunk before ' | ' or ' - '."""
+    """Collapse regional/work-arrangement variants for fuzzy title matching.
+
+    Two-step normalization:
+    1. Take the chunk before ' | ' or ' - ' (handles "Director, IT Security - Remote")
+    2. Strip parenthesized groups containing location/arrangement keywords
+       (handles "Senior GRC Security Analyst (remote)" and "(Remote, USA)")
+
+    Both forms appear on board re-listings of the same posting. The parens-strip
+    is intentionally narrow: parens with level markers like "(L4)" / "(IC5)" are
+    PRESERVED so an L4 listing does not collapse with an L5 listing.
+
+    Without both steps, backfill dedup misses the case where the tracker holds
+    the bare title and the digest has the suffix-decorated variant.
+    """
     first = re.split(r"\s*\|\s*|\s+-\s+", title, maxsplit=1)[0]
+    first = _LOC_ARRANGEMENT_PARENS.sub("", first)
     return first.strip().lower()
 
 
@@ -1293,7 +1318,7 @@ def run_backfill(
             continue
         ct_key = (
             normalize_company(entry.get("company", "")),
-            (entry.get("title", "") or "").lower().strip(),
+            normalize_title(entry.get("title", "") or ""),
         )
         if ct_key[0] and ct_key[1] and ct_key in tracker_pairs:
             continue
