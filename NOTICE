@@ -1,0 +1,34 @@
+jobhunter-framework
+Copyright (c) 2026 NullSpace-BitCradle
+
+Licensed under the MIT License - see LICENSE for the full text.
+
+This product includes the following third-party works:
+
+---
+
+LaTeX resume template (templates/resume-template.tex)
+- Original author: Michael Lustfield
+- License: Creative Commons Attribution 4.0 International (CC-BY-4.0)
+- License text: https://creativecommons.org/licenses/by/4.0/legalcode.txt
+- Modifications: adapted for use with the ATS Resume Writer agent;
+  ATS-compatible Unicode glyph mapping added.
+
+The CC-BY-4.0 attribution and modification notice are also preserved
+in the header of templates/resume-template.tex itself.
+
+---
+
+python-jobspy
+- Source: https://github.com/speedyapply/jobspy
+- License: MIT
+- Used as an optional dependency by the job-board aggregator path in
+  discovery/scrapers/. Not bundled; installed via pip per the quickstart.
+- LinkedIn, Indeed, Glassdoor, Google, and ZipRecruiter are accessed
+  exclusively through this library. See README.md "Responsible use"
+  for ToS considerations.
+
+---
+
+Cover letter template (templates/cover-letter-template.tex)
+- Authored for this project. MIT, same as the rest of the code.

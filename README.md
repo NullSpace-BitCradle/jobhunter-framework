@@ -1,8 +1,21 @@
 # jobhunter-framework
 
+**Tailor three resumes instead of spamming fifty, and have a tracker that actually tells you the truth at the end of the week.**
+
+> Status: **beta, v0.1.0** - released as-is. Issues welcome, no commitment to response time. Use at your own risk; see [Responsible use](#responsible-use) before running discovery.
+
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) job-hunting workbench. Covers the full pipeline: career intake, role discovery across ATS platforms and job boards, tailored resume and cover letter generation with a hard zero-fabrication policy, and end-to-end application tracking.
 
-Built for senior and principal IC candidates who care more about signal than volume, and who would rather spend tailoring budget on the three right roles than spray-and-pray at fifty.
+Built for candidates who care more about signal than volume. The framework is biased toward senior and principal IC roles - that is where the lane-fit scoring and crown-jewel placement earn their keep - but anyone who would rather invest tailoring budget in the three right roles than spray-and-pray at fifty is the right user.
+
+## Responsible use
+
+This framework runs against external job boards and ATS APIs. Read this before you run discovery:
+
+- **JobSpy (LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter):** [python-jobspy](https://github.com/speedyapply/jobspy) is the underlying library. LinkedIn and Indeed prohibit scraping in their Terms of Service. JobSpy works by mimicking browser traffic and will break without notice when those sites change. **Whether you use it on those boards is your call and your responsibility.** Set `jobspy.enabled: false` in `keywords.yaml` if you want ATS-only coverage.
+- **Rate limits.** The ATS scrapers (Greenhouse, Lever, Ashby, SmartRecruiters, Workable) hit public APIs. Default scan cadence is once per day. Do not loop the scanner; do not run it from CI without backoff.
+- **Your data.** Your Master Career Document, generated PDFs, and applications tracker live in a user-data directory outside the repo. The framework never uploads them anywhere. Whatever you push from your fork is your responsibility.
+- **Compliance.** Job-board ToS, scraping law, and employer data-handling expectations vary by jurisdiction. You are responsible for your own compliance with the platforms you choose to use.
 
 ## What makes this different
 
@@ -437,14 +450,24 @@ jobhunter-framework/
 
 ## Roadmap
 
-- [x] Phase 1: scaffold and code / content separation
-- [x] Phase 2: unified config, `config.yaml`-driven paths, user-data separation
-- [x] Phase 3: orchestration commands and applications tracker
-- [x] Phase 3.5: job board aggregation (LinkedIn via JobSpy) and cross-source dedup
-- [ ] Phase 4: agent paths entirely config-driven (remove remaining hardcoded symlinks)
-- [ ] Phase 5: Workday ATS support (the largest current gap in ATS coverage; many enterprise postings live here)
-- [ ] Phase 6: expanded test coverage (integration tests against recorded ATS fixtures, end-to-end slash-command flows)
-- [ ] Phase 7: public release polish (annotated screenshots, worked examples, getting-started tour)
+Shipped in v0.1.0:
+
+- [x] Scaffold with code / personal-content separation
+- [x] Unified `config.yaml` driving every path
+- [x] Orchestration slash commands (`/discover`, `/apply`, `/submitted`, `/triage`, `/backfill`, `/ingest`, `/decline`, `/sync-filters`)
+- [x] Plain-markdown applications tracker with 4-section state machine
+- [x] Job-board aggregation (LinkedIn / Indeed / Glassdoor / Google / ZipRecruiter via JobSpy) and cross-source dedup
+- [x] Title-suffix normalization for backfill (collapses `(remote)` / `- Remote` variants of the same role)
+
+Planned, no committed date:
+
+- [ ] Agent paths entirely config-driven (remove remaining hardcoded symlinks)
+- [ ] Workday ATS support (largest current gap; many enterprise postings live there)
+- [ ] Expanded integration tests (recorded ATS fixtures, end-to-end command flows)
+- [ ] Annotated screenshots, worked examples, getting-started tour (deferred to v0.2)
+- [ ] CHANGELOG (deferred to v0.2)
+
+If a gap blocks your use, open an issue describing the role you wanted to pursue and the surface that failed. PRs welcome.
 
 ## Detailed setup: LaTeX
 
@@ -481,4 +504,8 @@ If `pdflatex` complains about a missing `.sty` file on first compile, install th
 - Example config files (`*.example.yaml`, `applications.template.md`) are MIT.
 - Your personal content (Master Career Document, job descriptions, generated resumes and cover letters, application tracker) lives outside the repo per the user-data separation. Those files are yours; no license from this repository applies to them.
 
-See [LICENSE](LICENSE) for the MIT text.
+See [LICENSE](LICENSE) for the MIT text and [NOTICE](NOTICE) for third-party attributions.
+
+## Contributing
+
+PRs and issues are welcome. There is no committed review timeline. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening one - especially the "what is out of scope" section. Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
