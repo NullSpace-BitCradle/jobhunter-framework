@@ -1,7 +1,7 @@
 """JobSpy-based scraper for job board aggregators (LinkedIn, Indeed, Glassdoor, etc.)."""
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from .base import Job, Scraper
 # url_utils lives at discovery/ root (one level up from scrapers/); scrapers are
@@ -102,11 +102,62 @@ class JobspyScraper(Scraper):
         logger.info("JobSpy: fetched %d jobs from %s", len(jobs), sites)
         return jobs
 
+    @staticmethod
+    def _clean(value, pd) -> str:
+        """str(value) with every missing-data form mapped to "".
+
+        pandas represents missing cells as NaN (float), pd.NA, pd.NaT or None
+        depending on dtype and version; `str(x or "")` turned NaN into the
+        literal "nan" (NaN is truthy). Non-scalars (lists) are stringified as-is.
+        """
+        if value is None:
+            return ""
+        if not isinstance(value, (list, tuple, set, dict)):
+            try:
+                if pd.isna(value):
+                    return ""
+            except (TypeError, ValueError):
+                pass
+        return str(value).strip()
+
+    @staticmethod
+    def _parse_posted(raw_date, pd) -> datetime | None:
+        """date_posted -> aware datetime. JobSpy 1.4 returns datetime.date (no
+        time part); older versions and tests may give datetime, pd.Timestamp or
+        an ISO string. NaT/NaN/None give None."""
+        if raw_date is None:
+            return None
+        try:
+            if pd.isna(raw_date):  # NaN, pd.NA, pd.NaT
+                return None
+        except (TypeError, ValueError):
+            pass
+        if isinstance(raw_date, datetime):  # includes pd.Timestamp
+            return raw_date if raw_date.tzinfo else raw_date.replace(tzinfo=timezone.utc)
+        if isinstance(raw_date, date):
+            return datetime(raw_date.year, raw_date.month, raw_date.day, tzinfo=timezone.utc)
+        if isinstance(raw_date, str) and raw_date.strip():
+            try:
+                parsed = datetime.fromisoformat(raw_date.strip())
+            except ValueError:
+                return None
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        return None
+
     def _row_to_job(self, row, pd) -> Job | None:
-        """Map a jobspy DataFrame row to a Job dataclass."""
-        site = str(row.get("site", "unknown")).lower()
-        aggregator_url = str(row.get("job_url", ""))
-        direct_url = str(row.get("job_url_direct") or "")
+        """Map a jobspy DataFrame row to a Job dataclass.
+
+        Column shape (python-jobspy 1.4.x, `JobPost` in jobspy/model.py): a single
+        `location` string column ("City, ST, USA"), `company`, `job_url`,
+        `job_url_direct`, `date_posted` (datetime.date), `is_remote`,
+        `description`. Older fixtures used separate `city`/`state`/`country`
+        columns; those are still honoured when `location` is absent.
+        """
+        clean = lambda v: self._clean(v, pd)  # noqa: E731
+
+        site = clean(row.get("site")).lower() or "unknown"
+        aggregator_url = clean(row.get("job_url"))
+        direct_url = clean(row.get("job_url_direct"))
 
         # Canonicalize: prefer the ATS URL over the LinkedIn/Indeed URL when
         # job_url_direct resolves to a supported ATS. The ATS URL is more
@@ -119,40 +170,25 @@ class JobspyScraper(Scraper):
         url_hash = hashlib.sha256(job_url.encode()).hexdigest()[:16] if job_url else "unknown"
         job_id = f"jobspy:{site}:{url_hash}"
 
-        company = str(row.get("company", "")).strip()
-        title = str(row.get("title", "")).strip()
+        company = clean(row.get("company"))
+        title = clean(row.get("title"))
         if not title:
             return None
 
-        # Location assembly
-        loc_parts = []
-        for field in ("city", "state", "country"):
-            val = row.get(field)
-            if val and not (isinstance(val, float) and pd.isna(val)):
-                loc_parts.append(str(val).strip())
-        location = ", ".join(loc_parts) if loc_parts else ""
+        # Location: the single `location` column, else assemble city/state/country.
+        location = clean(row.get("location"))
+        if not location:
+            loc_parts = [clean(row.get(f)) for f in ("city", "state", "country")]
+            location = ", ".join(p for p in loc_parts if p)
 
         is_remote = row.get("is_remote")
-        if isinstance(is_remote, float) and pd.isna(is_remote):
+        try:
+            is_remote = None if is_remote is None or pd.isna(is_remote) else bool(is_remote)
+        except (TypeError, ValueError):
             is_remote = None
-        elif is_remote is not None:
-            is_remote = bool(is_remote)
 
-        description = str(row.get("description", "")) if row.get("description") is not None else ""
-        if isinstance(row.get("description"), float):
-            description = ""
-
-        # Parse date_posted
-        posted_at = None
-        raw_date = row.get("date_posted")
-        if raw_date is not None and not (isinstance(raw_date, float) and pd.isna(raw_date)):
-            if isinstance(raw_date, datetime):
-                posted_at = raw_date if raw_date.tzinfo else raw_date.replace(tzinfo=timezone.utc)
-            elif isinstance(raw_date, str):
-                try:
-                    posted_at = datetime.fromisoformat(raw_date).replace(tzinfo=timezone.utc)
-                except ValueError:
-                    pass
+        description = clean(row.get("description"))
+        posted_at = self._parse_posted(row.get("date_posted"), pd)
 
         # Determine tier - board jobs don't have a tier, use a generic one
         company_tier = "board_match"
@@ -167,8 +203,8 @@ class JobspyScraper(Scraper):
         raw = {
             "aggregator_url": aggregator_url,
             "job_url_direct": direct_url,
-            "company_url": str(row.get("company_url") or ""),
-            "company_url_direct": str(row.get("company_url_direct") or ""),
+            "company_url": clean(row.get("company_url")),
+            "company_url_direct": clean(row.get("company_url_direct")),
         }
 
         return Job(
