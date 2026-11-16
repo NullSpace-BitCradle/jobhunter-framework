@@ -12,7 +12,7 @@ Built for candidates who care more about signal than volume, in any field and at
 
 This framework runs against external job boards and ATS APIs. Read this before you run discovery:
 
-- **JobSpy (LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter):** [python-jobspy](https://github.com/speedyapply/jobspy) is the underlying library. LinkedIn and Indeed prohibit scraping in their Terms of Service. JobSpy works by mimicking browser traffic and will break without notice when those sites change. **Whether you use it on those boards is your call and your responsibility.** Set `jobspy.enabled: false` in `keywords.yaml` if you want ATS-only coverage.
+- **JobSpy (LinkedIn, Indeed, Glassdoor, ZipRecruiter):** [python-jobspy](https://github.com/speedyapply/jobspy) is the underlying library. LinkedIn and Indeed prohibit scraping in their Terms of Service. JobSpy works by mimicking browser traffic and will break without notice when those sites change. **Whether you use it on those boards is your call and your responsibility.** Set `jobspy.enabled: false` in `keywords.yaml` if you want ATS-only coverage.
 - **Rate limits.** The ATS scrapers (Greenhouse, Lever, Ashby, SmartRecruiters, Workable) hit public APIs. Default scan cadence is once per day. Do not loop the scanner; do not run it from CI without backoff.
 - **Your data.** Your Master Career Document, generated PDFs, and applications tracker live in a user-data directory outside the repo. The framework never uploads them anywhere. Whatever you push from your fork is your responsibility.
 - **Compliance.** Job-board ToS, scraping law, and employer data-handling expectations vary by jurisdiction. You are responsible for your own compliance with the platforms you choose to use.
@@ -33,7 +33,7 @@ This framework runs against external job boards and ATS APIs. Read this before y
 - **Career Document Builder** (`.claude/agents/career-doc-builder.md`) - interactive interview producing a structured Master Career Document (MCD), an 18-section document covering positioning, skills, metrics, work history, lane definitions, and anti-target rules.
 - **Job Discovery** (`discovery/main.py`) - Python CLI that scans two complementary source types:
   - **Direct ATS APIs**: Greenhouse, Lever, Ashby, SmartRecruiters, Workable
-  - **Job board aggregator**: LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter via [python-jobspy](https://github.com/speedyapply/jobspy)
+  - **Job board aggregator**: LinkedIn, Indeed, Glassdoor, ZipRecruiter via [python-jobspy](https://github.com/speedyapply/jobspy)
   Results pass through keyword, location, remote, and anti-target filters, then get ranked by a configurable scoring function and written to a daily digest.
 - **Resume Writer** (`.claude/agents/ats-resume-writer.md`) - writes ATS-optimized LaTeX resumes and cover letters from MCD + job description, with anti-target, stretch-fit, crown-jewel, summary-authenticity, and distinctive-career-fact guards running before any tailoring. It only reads and writes files; it has no shell or web access.
 - **Templates and validator** (`templates/`, `tools/validate.ts`, `tools/export-text.ts`) - the LaTeX templates, the zero-fabrication validator, and the plain-text export, vendored unchanged from [ats-resume-agent](https://github.com/NullSpace-BitCradle/ats-resume-agent).
@@ -56,13 +56,13 @@ The framework separates code (this repo) from personal data (your user-data dire
   discovery/
     config/                         # your target companies and anti-target rules
     state/seen-jobs.json            # dedup state
-    output/digest-YYYY-MM-DD.md     # daily ranked digest
+    output/digest-YYYY-MM-DD-HHMMSS.md  # one ranked digest per run (dry runs: dryrun-*.md)
 
 ~/Projects/jobhunter-framework/     # this repo - code only
   .claude/agents/                   # ats-resume-writer, career-doc-builder
   .claude/commands/                 # /discover, /apply, /submitted, /triage, /sync-filters
   discovery/                        # Python scanner
-    main.py, dedup.py
+    main.py, dedup.py, fsutil.py
     scrapers/                       # 6 scrapers (5 ATS + JobSpy)
     tests/
     config/*.example.yaml           # tracked examples
@@ -106,6 +106,15 @@ You need:
 - Python 3.10+ (required by python-jobspy)
 - LaTeX (for resume and cover letter PDF compilation)
 - [Bun](https://bun.sh) (runs the zero-fabrication validator and the text export; `/apply` will not offer a resume without it)
+
+**Platform support.** Job discovery (the scanner, its state files, and the test suite) runs on Linux, macOS, and native Windows. CI runs the tests on all three. On Windows:
+
+- Use `py -3 -m venv venv` and `venv\Scripts\activate`, or call `venv\Scripts\python.exe main.py` directly. The slash commands try `venv/bin/python` first and fall back to `venv/Scripts/python.exe`, so they work from Claude Code's Git Bash as well.
+- State and digests are written as UTF-8 with LF line endings and replaced atomically (temp file + `os.replace`); nothing depends on `fcntl`.
+- Digest names use your system timezone. To pin one, set `discovery.timezone: America/New_York` (any IANA name) in `config.yaml`; `requirements.txt` installs `tzdata` on Windows for this.
+- Python 3.15 on Windows has no PyYAML wheel yet and building it needs the Microsoft C++ Build Tools. Use Python 3.10 to 3.14 until a wheel ships.
+- The resume pipeline needs `pdflatex` and Bun (see the LaTeX section). Both templates have been compiled with MiKTeX on Windows.
+
 
 If you already have a working LaTeX install with `pdflatex` available, skip ahead to step 2. Otherwise, LaTeX install commands and the required TeX Live collections are in [Detailed setup: LaTeX](#detailed-setup-latex) at the bottom of this README.
 
@@ -156,7 +165,7 @@ If you already have a long-form career document, point Claude at it and the buil
 ```bash
 cd discovery
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate          # Windows: venv\Scripts\activate  (PowerShell or cmd)
 pip install -r requirements.txt
 
 # Copy examples into your user-data discovery config dir
@@ -185,7 +194,7 @@ python main.py --dry-run  # scan without updating state
 python main.py -v         # verbose logging
 ```
 
-Output lands at `~/JobHunt/discovery/output/digest-YYYY-MM-DD.md`.
+Every run writes a new `~/JobHunt/discovery/output/digest-YYYY-MM-DD-HHMMSS.md`, so a second scan on the same day never overwrites the first (the first scan already marked its jobs as seen). `--dry-run` writes `dryrun-YYYY-MM-DD-HHMMSS.md` instead, which `/backfill` ignores. The scan prints the exact path.
 
 ### 5. Generate resumes and track applications
 
@@ -347,8 +356,8 @@ Slash commands that need canonical form on demand can call `python discovery/mai
 
 Discovery deduplicates at two levels:
 
-1. **Within-source** - every job gets a unique ID (`{ats}:{slug}:{id}` for ATS, `jobspy:{site}:{hash}` for boards; the `{hash}` is of the canonicalized URL, so tracking-param variations don't fork the ID). IDs are tracked in `seen-jobs.json`; jobs seen on prior runs are filtered out. IDs age out after 60 days or when the file hits 50,000 entries, whichever comes first.
-2. **Cross-source** - when the same role appears on both an ATS and a job board, fuzzy matching on normalized company name and title keeps only the ATS version (richer description, direct apply link).
+1. **Within-source** - every job gets a unique ID (`{ats}:{slug}:{id}` for ATS, `jobspy:{site}:{hash}` for boards; the `{hash}` is of the canonicalized URL, so tracking-param variations don't fork the ID). IDs are tracked in `seen-jobs.json`; jobs seen on prior runs are filtered out. Every ID fetched on a run gets its timestamp refreshed, so a posting that stays open is never forgotten; an ID ages out only after it has been absent from the feeds for 60 days (or when the file hits 50,000 entries, newest kept). If `seen-jobs.json` is ever unreadable the scan stops with an error instead of starting empty (which would re-surface every posting); a `.bak` of the last good state and a `.corrupt` copy of the bad file are kept next to it.
+2. **Cross-source** - when the same role appears on both an ATS and a job board, fuzzy matching on normalized company name and title keeps only the ATS version (richer description, direct apply link). Titles are compared after dropping only location / work-arrangement decoration (`- Remote`, `(Remote, USA)`, `| US`); role qualifiers such as `- Detection` vs `- Cloud` and level markers such as `(L4)` keep postings distinct. Distinct postings from the same source with the same title (e.g. one per office) are all kept.
 
 ### Candidate company discovery
 
@@ -378,7 +387,7 @@ This converts passive JobSpy scraping into an active feed of companies worth pro
 
 ### Backfill
 
-When new postings are light or you want to widen the net, `/backfill` walks back over recent `digest-*.md` files and surfaces every matched job that never made it into the tracker at any status. Useful for two patterns:
+When new postings are light or you want to widen the net, `/backfill` walks back over recent `digest-*.md` files (every run now writes its own timestamped digest; the older `digest-YYYY-MM-DD.md` form is still read, `dryrun-*.md` previews are ignored) and surfaces every matched job that never made it into the tracker at any status. Useful for two patterns:
 
 ```
 /backfill                        # last 30 days, top 30 by score
@@ -435,11 +444,12 @@ Then the writer picks roles by recency measured from the end of your most recent
 
 ```bash
 cd discovery
-source venv/bin/activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements-dev.txt
 python -m pytest tests/ -v
 ```
 
-238 tests cover all 6 scrapers (mocked), filter and scoring logic, state management, digest writing, cross-source deduplication, URL canonicalization, ingest filter rejection reasons (including local on-site allow-regex short-circuit), tracker parsing across the four-section Queued/In Process/Rejected/Declined layout, and JobSpy field mapping.
+319 tests cover all 6 scrapers (mocked), filter and scoring logic, state management (atomic writes, unreadable-state refusal, seen-id refresh), digest writing (unique names, dry-run isolation, UTF-8), cross-source deduplication, URL canonicalization, ingest filter rejection reasons (including local on-site allow-regex short-circuit), tracker parsing across the four-section Queued/In Process/Rejected/Declined layout, and JobSpy field mapping. The suite never touches the network: `tests/conftest.py` makes any real socket connection fail the test.
 
 The Bun side has its own tests, run from the repo root:
 
@@ -469,7 +479,10 @@ jobhunter-framework/
 │       └── sync-filters.md          # /sync-filters
 ├── discovery/
 │   ├── main.py                      # scan, filter, score, dedup, digest
-│   ├── dedup.py                     # cross-source dedup
+│   ├── dedup.py                     # cross-source dedup + the shared title normalizer
+│   ├── fsutil.py                    # atomic UTF-8 writes, unreadable-state handling, unique digest names
+│   ├── requirements.txt             # runtime dependencies (compatible-release ranges)
+│   ├── requirements-dev.txt         # + pytest, used by CI
 │   ├── migrate_tracker.py           # one-shot: old 2-section layout -> new 4-section layout
 │   ├── update_tracker_stats.py      # refresh the stats line at the top of applications.md
 │   ├── scrapers/
@@ -501,6 +514,7 @@ jobhunter-framework/
 │   └── known-limitations.md
 ├── config.example.yaml              # framework config template
 ├── applications.template.md         # tracker schema
+├── .github/workflows/ci.yml         # pytest on Linux, macOS, Windows (no live network)
 ├── CLAUDE.md                        # Claude Code project instructions
 └── README.md
 ```
@@ -513,7 +527,7 @@ What works today:
 - [x] Unified `config.yaml` driving every path
 - [x] Orchestration slash commands (`/discover`, `/apply`, `/submitted`, `/triage`, `/backfill`, `/ingest`, `/decline`, `/sync-filters`)
 - [x] Plain-markdown applications tracker with 4-section state machine
-- [x] Job-board aggregation (LinkedIn / Indeed / Glassdoor / Google / ZipRecruiter via JobSpy) and cross-source dedup
+- [x] Job-board aggregation (LinkedIn / Indeed / Glassdoor / ZipRecruiter via JobSpy) and cross-source dedup
 - [x] Title-suffix normalization for backfill (collapses `(remote)` / `- Remote` variants of the same role)
 - [x] Agent paths entirely config-driven (slash commands self-locate via `git rev-parse --show-toplevel` and pass resolved absolute paths to the agents, which have no shell)
 

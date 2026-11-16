@@ -15,7 +15,7 @@ If you do not want to deal with LaTeX, you can still use the discovery + tracker
 
 ## JobSpy is fragile
 
-The job-board aggregator path (`discovery/scrapers/jobspy.py`) uses [python-jobspy](https://github.com/speedyapply/jobspy) to scrape LinkedIn, Indeed, Glassdoor, Google, and ZipRecruiter. LinkedIn and Indeed actively change their pages and block automated traffic. Expect this path to break periodically and need a JobSpy upstream update.
+The job-board aggregator path (`discovery/scrapers/jobspy.py`) uses [python-jobspy](https://github.com/speedyapply/jobspy) to scrape LinkedIn, Indeed, Glassdoor, and ZipRecruiter. (python-jobspy lists Google Jobs as a site but documents it as currently unavailable, so the scanner does not use it.) LinkedIn and Indeed actively change their pages and block automated traffic. Expect this path to break periodically and need a JobSpy upstream update.
 
 **If JobSpy is broken on your platform of choice:**
 - Set `jobspy.enabled: false` in `keywords.yaml` to disable that path entirely.
@@ -36,7 +36,7 @@ Tracking issue welcome with a specific company / role and the Workday URL patter
 
 If you set `jobspy.enabled: false` (recommended for compliance), you lose coverage of any company that does NOT publish to one of the supported ATS APIs (Greenhouse, Lever, Ashby, SmartRecruiters, Workable). For senior IC roles at large companies, this is fine - most of them are on one of the supported ATS platforms. For smaller companies and recruiter-routed roles, you will need `/ingest` to bring those in by URL.
 
-## Test suite has 1 collection error without `pandas`
+## The JobSpy tests need `pandas`
 
 `discovery/tests/test_jobspy.py` imports pandas via JobSpy. If you only want to run the framework's own tests (not JobSpy integration tests), use:
 
@@ -44,7 +44,7 @@ If you set `jobspy.enabled: false` (recommended for compliance), you lose covera
 python3 -m pytest --ignore=tests/test_jobspy.py -q
 ```
 
-The 230 framework tests are fully independent of JobSpy.
+The 300 non-JobSpy tests are fully independent of JobSpy.
 
 ## The MCD interview can hallucinate prompts on cold start
 

@@ -1,0 +1,3 @@
+# Test / CI dependencies (the runtime dependencies come from requirements.txt).
+-r requirements.txt
+pytest>=8,<10

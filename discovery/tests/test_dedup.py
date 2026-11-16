@@ -104,12 +104,36 @@ class TestDeduplicateCrossSource:
         result = deduplicate_cross_source(jobs)
         assert len(result) == 2
 
-    def test_same_source_same_key_keeps_first(self):
-        """Two ATS jobs with same normalized key - first one wins (ID dedup is separate)."""
+    def test_same_source_distinct_postings_are_both_kept(self):
+        """Two ATS postings with the same title but different ids are different
+        postings (e.g. London vs Remote-US); cross-source dedup must not drop one.
+        (It used to keep only the first, which could discard the only posting that
+        passes the location filter.)"""
         jobs = [
             _job("greenhouse:dd:1", "Datadog", "Principal Security Engineer", source="ats"),
             _job("greenhouse:dd:2", "Datadog", "Principal Security Engineer", source="ats"),
         ]
         result = deduplicate_cross_source(jobs)
-        # Same source - cross-source dedup doesn't remove these (ID dedup handles it)
-        assert len(result) == 1  # Same normalized key, first one wins
+        assert [j.id for j in result] == ["greenhouse:dd:1", "greenhouse:dd:2"]
+
+    def test_same_id_repeated_is_dropped(self):
+        """The same board posting returned by the main search and a local_searches pass."""
+        jobs = [
+            _job("jobspy:linkedin:9", "Wiz", "Staff Security Engineer", source="board"),
+            _job("jobspy:linkedin:9", "Wiz", "Staff Security Engineer", source="board"),
+        ]
+        assert len(deduplicate_cross_source(jobs)) == 1
+
+    def test_board_dropped_when_ats_copy_has_location_suffix(self):
+        jobs = [
+            _job("greenhouse:wiz:1", "Wiz", "Staff Security Engineer", source="ats"),
+            _job("jobspy:linkedin:2", "Wiz", "Staff Security Engineer - Remote", source="board"),
+        ]
+        assert [j.id for j in deduplicate_cross_source(jobs)] == ["greenhouse:wiz:1"]
+
+    def test_distinct_role_suffix_is_not_collapsed(self):
+        jobs = [
+            _job("greenhouse:x:1", "X", "Senior Security Engineer - Detection", source="ats"),
+            _job("jobspy:linkedin:2", "X", "Senior Security Engineer - Cloud", source="board"),
+        ]
+        assert len(deduplicate_cross_source(jobs)) == 2

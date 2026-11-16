@@ -21,6 +21,9 @@ discovery:
   config_dir: ~/JobHunt/discovery/config
   state_file: ~/JobHunt/discovery/state/seen-jobs.json
   digest_dir: ~/JobHunt/discovery/output
+  # Timezone for digest filenames and dates (IANA name). Optional: omit it to use
+  # the system local timezone (works the same on Linux, macOS and Windows).
+  # timezone: America/New_York
 
 # Gmail / Calendar integration (optional)
 gmail:

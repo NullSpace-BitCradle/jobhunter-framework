@@ -48,7 +48,7 @@ def _resolve_tracker_path() -> Path:
             yaml = None  # PyYAML may not be installed in a minimal env
         if yaml is not None:
             try:
-                cfg = yaml.safe_load(config_path.read_text()) or {}
+                cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
                 raw = cfg.get("applications_file")
                 if raw:
                     return Path(raw).expanduser()
@@ -145,7 +145,7 @@ def main() -> int:
         print(f"Tracker not found at {TRACKER_PATH}", file=sys.stderr)
         return 2
 
-    text = TRACKER_PATH.read_text()
+    text = TRACKER_PATH.read_text(encoding="utf-8")
     lines = text.splitlines()
     counts = count_by_section(lines)
 
@@ -164,7 +164,7 @@ def main() -> int:
         # No change (line already identical) - skip write to keep mtime clean
         return 0
 
-    TRACKER_PATH.write_text(new_text)
+    TRACKER_PATH.write_text(new_text, encoding="utf-8")
     return 0
 
 

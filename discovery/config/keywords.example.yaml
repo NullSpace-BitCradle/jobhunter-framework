@@ -8,6 +8,12 @@
 #   2. Title contains at least one `domain_keywords_in_title` entry
 #   3. Title contains none of the `title_exclusions`
 #   4. If require_remote: true, location or remote flag must indicate remote
+#
+# Matching is case-insensitive. `tier_keywords_in_title` and
+# `domain_keywords_in_title` match as substrings ("security" also matches
+# "Cybersecurity"); `title_exclusions` match whole words or phrases only
+# ("intern" does not exclude "Internal" or "International", but it also does not
+# exclude "Interns" - list plural forms you want excluded).
 
 match_rules:
   tier_keywords_in_title:
@@ -35,6 +41,7 @@ match_rules:
   title_exclusions:
     - intern
     - internship
+    - interns
     - junior
     - entry
     - analyst i
@@ -75,8 +82,8 @@ jobspy:
     - linkedin
     # - indeed
     # - glassdoor
-    # - google
     # - zip_recruiter
+    # (Google Jobs is not listed: python-jobspy documents it as currently unavailable.)
   # search_term: override auto-generated term (built from domain_keywords if omitted)
   # search_term: '"vulnerability management" OR "security architect" OR "security engineer"'
   location: "USA"

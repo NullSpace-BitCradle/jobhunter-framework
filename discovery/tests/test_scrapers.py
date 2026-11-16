@@ -86,6 +86,29 @@ class TestGreenhouseScraper:
         # Second job: on-site
         assert jobs[1].remote is False
 
+    def test_posted_date_prefers_first_publish_over_updated_at(self):
+        """An edited old posting must not look fresh: updated_at moves on every edit."""
+        for first_key in ("first_published_at", "first_published"):
+            data = {"jobs": [{
+                "id": 1, "title": "Staff Security Engineer",
+                "location": {"name": "Remote - US"},
+                "absolute_url": "https://boards.greenhouse.io/testco/jobs/1",
+                first_key: "2026-01-02T00:00:00Z",
+                "updated_at": "2026-04-20T00:00:00Z",
+                "content": "",
+            }]}
+            scraper = GreenhouseScraper()
+            with _patch_session(scraper, return_value=_mock_response(json_data=data)):
+                j = scraper.fetch_jobs(*COMPANY)[0]
+            assert j.posted_at == datetime.fromisoformat("2026-01-02T00:00:00+00:00"), first_key
+
+    def test_posted_date_falls_back_to_updated_at(self):
+        """The documented list response only has updated_at; still better than None."""
+        scraper = GreenhouseScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=GREENHOUSE_RESPONSE)):
+            j = scraper.fetch_jobs(*COMPANY)[0]
+        assert j.posted_at == datetime.fromisoformat("2026-04-01T12:00:00+00:00")
+
     def test_404(self):
         scraper = GreenhouseScraper()
         with _patch_session(scraper, return_value=_mock_response(404)):
@@ -149,7 +172,42 @@ class TestLeverScraper:
 # Ashby
 # ---------------------------------------------------------------------------
 
+# Documented shape (developers.ashbyhq.com Public Job Posting API): `location`,
+# `publishedAt`, `workplaceType`, and NO `id` (the posting uuid is in `jobUrl`).
 ASHBY_RESPONSE = {
+    "jobs": [
+        {
+            "title": "Staff Threat Researcher",
+            "location": "United States",
+            "isRemote": True,
+            "workplaceType": "Remote",
+            "isListed": True,
+            "jobUrl": "https://jobs.ashbyhq.com/testco/5a1b2c3d-0000-4000-8000-000000000001",
+            "applyUrl": "https://jobs.ashbyhq.com/testco/5a1b2c3d-0000-4000-8000-000000000001/application",
+            "publishedAt": "2026-04-05T00:00:00.000+00:00",
+            "descriptionPlain": "Hunt threats across the ecosystem.",
+        },
+        {
+            "title": "Principal Detection Engineer",
+            "location": "Austin, TX",
+            "isRemote": True,           # Ashby sets this for Hybrid too
+            "workplaceType": "Hybrid",
+            "jobUrl": "https://jobs.ashbyhq.com/testco/5a1b2c3d-0000-4000-8000-000000000002",
+            "publishedAt": "2026-04-06T00:00:00.000+00:00",
+            "descriptionPlain": "Detect things.",
+        },
+        {
+            "title": "Staff SRE",
+            "location": "Denver, CO",
+            "isRemote": False,
+            "workplaceType": "OnSite",
+            "jobUrl": "https://jobs.ashbyhq.com/testco/5a1b2c3d-0000-4000-8000-000000000003",
+        },
+    ]
+}
+
+# Legacy shape this scraper originally read (id / locationName / publishedDate).
+ASHBY_LEGACY_RESPONSE = {
     "jobs": [
         {
             "id": "ash-001",
@@ -165,16 +223,58 @@ ASHBY_RESPONSE = {
 
 
 class TestAshbyScraper:
-    def test_happy_path(self):
+    def test_documented_shape(self):
         scraper = AshbyScraper()
         with _patch_session(scraper, return_value=_mock_response(json_data=ASHBY_RESPONSE)):
+            jobs = scraper.fetch_jobs(*COMPANY)
+        assert len(jobs) == 3
+        j = jobs[0]
+        # No `id` in the documented shape: derived from the jobUrl uuid.
+        assert j.id == "ashby:testco:5a1b2c3d-0000-4000-8000-000000000001"
+        assert j.title == "Staff Threat Researcher"
+        assert j.location == "United States"          # from `location`, not locationName
+        assert j.remote is True
+        assert j.posted_at == datetime.fromisoformat("2026-04-05T00:00:00+00:00")  # publishedAt
+        assert j.url.endswith("000000000001")
+
+    def test_documented_shape_survives_the_location_filter(self):
+        """Regression: reading `locationName` left location empty, so Ashby jobs
+        failed required_location_regex and dropped silently."""
+        import re
+        scraper = AshbyScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=ASHBY_RESPONSE)):
+            j = scraper.fetch_jobs(*COMPANY)[0]
+        assert re.search(r"\b(united states|usa)\b", j.location.lower())
+
+    def test_hybrid_is_not_remote_and_is_marked(self):
+        from main import classify_work_mode
+        scraper = AshbyScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=ASHBY_RESPONSE)):
+            jobs = scraper.fetch_jobs(*COMPANY)
+        hybrid, onsite = jobs[1], jobs[2]
+        assert hybrid.remote is False          # despite isRemote: true
+        assert "Hybrid" in hybrid.location
+        assert classify_work_mode(hybrid) == "hybrid"
+        assert onsite.remote is False
+        assert classify_work_mode(onsite) == "on_site"
+        assert classify_work_mode(jobs[0]) == "remote"
+
+    def test_legacy_shape_still_parses(self):
+        scraper = AshbyScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=ASHBY_LEGACY_RESPONSE)):
             jobs = scraper.fetch_jobs(*COMPANY)
         assert len(jobs) == 1
         j = jobs[0]
         assert j.id == "ashby:testco:ash-001"
-        assert j.title == "Staff Threat Researcher"
-        assert j.remote is True
         assert j.location == "United States"
+        assert j.remote is True
+        assert j.posted_at == datetime.fromisoformat("2026-04-05T00:00:00+00:00")
+
+    def test_posting_without_id_or_url_is_skipped_not_fatal(self):
+        data = {"jobs": [{"title": "Ghost"}, ASHBY_RESPONSE["jobs"][0]]}
+        scraper = AshbyScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=data)):
+            assert len(scraper.fetch_jobs(*COMPANY)) == 1
 
     def test_timeout(self):
         scraper = AshbyScraper()
@@ -186,7 +286,32 @@ class TestAshbyScraper:
 # SmartRecruiters
 # ---------------------------------------------------------------------------
 
+# Documented list shape: summaries only, NO `jobAd` (it comes from the detail endpoint).
 SMARTRECRUITERS_RESPONSE = {
+    "totalFound": 1,
+    "content": [
+        {
+            "id": "sr-001",
+            "uuid": "00000000-0000-4000-8000-000000000001",
+            "name": "Principal VM Engineer",
+            "location": {"city": "Denver", "region": "CO", "country": "US", "remote": True},
+            "releasedDate": "2026-04-02T10:00:00Z",
+            "ref": "https://api.smartrecruiters.com/v1/companies/testco/postings/sr-001",
+        }
+    ],
+}
+
+# Detail endpoint (/postings/{id}) carries the job ad.
+SMARTRECRUITERS_DETAIL = {
+    "id": "sr-001",
+    "jobAd": {"sections": {
+        "jobDescription": {"title": "Job Description", "text": "<p>Manage vulnerability programs.</p>"},
+        "qualifications": {"title": "Qualifications", "text": "<ul><li>CISSP is required</li></ul>"},
+    }},
+}
+
+# Legacy shape this scraper originally assumed (jobAd inline in the list).
+SMARTRECRUITERS_LEGACY_RESPONSE = {
     "totalFound": 1,
     "content": [
         {
@@ -201,10 +326,11 @@ SMARTRECRUITERS_RESPONSE = {
 
 
 class TestSmartRecruitersScraper:
-    def test_happy_path(self):
+    def test_list_shape_has_no_description_and_is_flagged_pending(self):
         scraper = SmartRecruitersScraper()
-        with _patch_session(scraper, return_value=_mock_response(json_data=SMARTRECRUITERS_RESPONSE)):
+        with _patch_session(scraper, return_value=_mock_response(json_data=SMARTRECRUITERS_RESPONSE)) as get:
             jobs = scraper.fetch_jobs(*COMPANY)
+        assert get.call_count == 1                      # no per-job detail call at list time
         assert len(jobs) == 1
         j = jobs[0]
         assert j.id == "smartrecruiters:testco:sr-001"
@@ -212,7 +338,36 @@ class TestSmartRecruitersScraper:
         assert j.remote is True
         assert "Denver" in j.location
         assert "Remote" in j.location
+        assert j.description_text == ""
+        assert j.raw["description_pending"] is True
+
+    def test_legacy_inline_jobad_still_read(self):
+        scraper = SmartRecruitersScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=SMARTRECRUITERS_LEGACY_RESPONSE)):
+            j = scraper.fetch_jobs(*COMPANY)[0]
         assert "vulnerability programs" in j.description_text
+        assert not j.raw.get("description_pending")
+
+    def test_enrich_job_fetches_detail(self):
+        scraper = SmartRecruitersScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=SMARTRECRUITERS_RESPONSE)):
+            j = scraper.fetch_jobs(*COMPANY)[0]
+        with _patch_session(scraper, return_value=_mock_response(json_data=SMARTRECRUITERS_DETAIL)) as get:
+            assert scraper.enrich_job(j) is True
+        assert get.call_args[0][0] == "https://api.smartrecruiters.com/v1/companies/testco/postings/sr-001"
+        assert "vulnerability programs" in j.description_text
+        assert "CISSP is required" in j.description_text
+        assert j.raw["description_pending"] is False
+
+    def test_enrich_job_failure_leaves_job_unchanged(self):
+        scraper = SmartRecruitersScraper()
+        with _patch_session(scraper, return_value=_mock_response(json_data=SMARTRECRUITERS_RESPONSE)):
+            j = scraper.fetch_jobs(*COMPANY)[0]
+        with _patch_session(scraper, return_value=_mock_response(500)):
+            assert scraper.enrich_job(j) is False
+        with _patch_session(scraper, side_effect=requests.ReadTimeout("t")):
+            assert scraper.enrich_job(j) is False
+        assert j.description_text == ""
 
     def test_empty_slug(self):
         scraper = SmartRecruitersScraper()
