@@ -67,10 +67,10 @@ Usage cues that trigger this agent:
 When asked to scan for new job postings, run:
 
 ```bash
-cd discovery && source venv/bin/activate && python main.py
+cd discovery && { PY=venv/bin/python; [ -x "$PY" ] || PY=venv/Scripts/python.exe; "$PY" main.py; }
 ```
 
-Output is written to `discovery/output/digest-YYYY-MM-DD.md`. State (seen-job IDs for dedup) is kept in `discovery/state/seen-jobs.json`. Subsequent runs only surface genuinely new postings.
+Each run writes a new `discovery/output/digest-YYYY-MM-DD-HHMMSS.md` (`--dry-run` writes `dryrun-...md`; it never overwrites an earlier digest). State (seen-job IDs for dedup) is kept in `discovery/state/seen-jobs.json`. Subsequent runs only surface genuinely new postings.
 
 ## Hard constraints
 

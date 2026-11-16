@@ -1,3 +1,9 @@
-requests>=2.31.0
-PyYAML>=6.0
-python-jobspy>=1.1.80
+# Compatible-release ranges: pick up bug fixes, stop before the next major.
+requests~=2.31
+PyYAML~=6.0
+# JobSpy 1.4.x is verified against the scanner (single `location` column,
+# `date_posted` as datetime.date). <2 because 2.0 removes the deprecated
+# linkedin_fetch_description argument the scanner still passes.
+python-jobspy>=1.1.80,<2
+# zoneinfo needs the IANA database; Windows does not ship one.
+tzdata; sys_platform == "win32"

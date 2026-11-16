@@ -64,8 +64,8 @@ For each anti-target lane in the MCD, generate a YAML filter block under `anti_t
 - **Key:** a snake_case slug derived from the lane name (e.g., "Hands-on Application Security Engineer" → `hands_on_appsec`)
 - **`description:`** a short human-readable label ending with "(MCD anti-target)"
 - **Match conditions** - use the condition types from the filter schema:
- - `title_contains_any:` - lowercase substrings to match in job titles
- - `description_contains_any:` - lowercase substrings to match in JD body text
+ - `title_contains_any:` - whole words or phrases to match in job titles
+ - `description_contains_any:` - whole words or phrases to match in JD body text
  - `description_contains_all:` - ALL must match (for tighter patterns)
  - `location_contains_any:` - match in location field
  - `negates_if_location_also_contains:` - cancel the match if location also has these terms (e.g., "remote" negates "on-site")
@@ -75,7 +75,7 @@ When generating match strings:
 - Use common ATS phrasing you'd expect to see in real job descriptions
 - Be conservative - false negatives (missing a bad match) are acceptable; false positives (filtering a good match) are not
 - For certification/degree requirements, match on "required" language only - not "preferred" or "nice to have"
-- Keep strings lowercase (the matching engine lowercases inputs)
+- Matching is case-insensitive (the scanner lowercases both the posting text and every string in `filters.yaml`) and whole-word: `waf` matches "WAF" but not "waffle", and `intern` matches "Intern" but not "Internal". Plurals and stems are not implied, so list each form you want ("intern" and "interns"). Writing the strings in lowercase is still the convention
 
 **If a current filters.yaml pattern corresponds to an MCD anti-target, preserve the user's existing match strings** - they may have been tuned from real-world scan results. Only add new strings, don't remove hand-tuned ones.
 
