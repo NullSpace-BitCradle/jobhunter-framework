@@ -16,7 +16,7 @@ The command:
 
 1. Moves the row from `## Queued` to `## Declined`
 2. Sets Status to `withdrew`
-3. Deletes the resume + cover letter files (`.tex` + `.pdf`). Keeps the JD file.
+3. Deletes the resume + cover letter files (`.tex`, `.pdf`, and the `.txt` export). Keeps the JD file.
 4. Updates the row's Notes with the decline reason.
 
 User input: `$ARGUMENTS`
@@ -55,7 +55,7 @@ Extract the resume and cover letter paths (the `[resume](...)` and `[cover](...)
 
 1. Resolve `~/` to the user's home.
 2. Delete the `.pdf` file if it exists.
-3. Delete the matching `.tex` file (same basename) if it exists.
+3. Delete the matching `.tex` and `.txt` files (same basename) if they exist.
 4. If the file does not exist, log it and continue - do not error.
 
 **Do NOT delete the JD file** (the `[jd](...)` link). The JD is the record of what the posting said and stays under `jobs/`.
