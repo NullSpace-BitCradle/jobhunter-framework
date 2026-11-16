@@ -35,7 +35,7 @@ When a row's status transitions across a section boundary (e.g. `queued -> appli
 
 ## File retention rule
 
-Generated resume + cover letter files (`.tex` + `.pdf`) are retained ONLY for roles the user actually submitted. When a row lands in `## Declined` (user-initiated decline or agent anti-target refusal), the matching resume and cover letter files are deleted. The JD file under `jobs/` is kept regardless - it is the record of what the posting said. Rows in `## Rejected` keep their files since the user did apply.
+Generated resume + cover letter files (`.tex`, `.pdf`, and the `.txt` export) are retained ONLY for roles the user actually submitted. When a row lands in `## Declined` (user-initiated decline or agent anti-target refusal), the matching resume and cover letter files are deleted. The JD file under `jobs/` is kept regardless - it is the record of what the posting said. Rows in `## Rejected` keep their files since the user did apply.
 
 ## Queued
 

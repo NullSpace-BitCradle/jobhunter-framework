@@ -1,6 +1,6 @@
 ---
 description: Triage the job-hunt inbox - classify mail, update tracker, schedule interviews
-argument-hint: [--limit N] [--days N]
+argument-hint: "[--limit N] [--days N]"
 ---
 
 # /triage - Daily job-search inbox triage

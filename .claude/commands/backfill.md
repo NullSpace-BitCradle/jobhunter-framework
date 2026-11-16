@@ -1,6 +1,6 @@
 ---
 description: Surface matched jobs from past digests that were never logged to the tracker
-argument-hint: [--days N] [--limit N] [--min-score N] [--max-score N]
+argument-hint: "[--days N] [--limit N] [--min-score N] [--max-score N]"
 ---
 
 # /backfill - Resurface missed opportunities from past digests

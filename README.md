@@ -6,7 +6,7 @@
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) job-hunting workbench. Covers the full pipeline: career intake, role discovery across ATS platforms and job boards, tailored resume and cover letter generation with a hard zero-fabrication policy, and end-to-end application tracking.
 
-Built for candidates who care more about signal than volume. The framework is biased toward senior and principal IC roles - that is where the lane-fit scoring and crown-jewel placement earn their keep - but anyone who would rather invest tailoring budget in the three right roles than spray-and-pray at fifty is the right user.
+Built for candidates who care more about signal than volume, in any field and at any level. The lane-fit scoring and crown-jewel placement earn their keep whenever you are choosing among a few roles worth tailoring for, and the writer handles careers that include a break: recency is measured from the end of your most recent role, and a gap can be shown as a career break instead of costing you your earlier roles. The discovery examples are tuned for one tech search; [`examples/`](examples/) has a non-tech career document to start from.
 
 ## Responsible use
 
@@ -19,13 +19,14 @@ This framework runs against external job boards and ATS APIs. Read this before y
 
 ## What makes this different
 
-- **Writes only from verified content.** Every line in the resume and cover letter comes from your Master Career Document. If a metric is not in the MCD, it is not in the output.
+- **Writes only from verified content, and checks it.** Every line in the resume and cover letter comes from your Master Career Document. If a metric is not in the MCD, it is not in the output. A deterministic validator traces every number, date, employer, title, degree, certification, and listed skill back to the MCD, and `/apply` offers nothing until it passes.
 - **Scores lane fit before tailoring.** Each generation run rates the target job against your MCD's positioning lanes. Stretch fits require explicit confirmation; anti-target lanes block generation entirely.
 - **Enforces crown-jewel placement.** Your MCD flags verifiable, differentiated achievements only you can credibly claim. The writer places those in the summary paragraph for principal- and staff-tier roles.
-- **Anchors the summary to roles you have held.** The opening title maps to a role you have genuinely held or performed. No inventing a "Staff AppSec Engineer with 10 years of experience" where no such history exists.
+- **Anchors the summary to roles you have held.** The opening title maps to a role you have genuinely held or performed. No "Nurse Manager with 10 years of experience" for a charge nurse, no "Engineering Manager" for an individual contributor.
 - **Keeps your data out of the repo.** Your MCD, job descriptions, generated materials, and application tracker live in a user-data directory. The repo stays code-only.
 - **Plain-markdown state you can grep.** Applications, statuses, and interview notes live in a human-readable tracker you can search, version, or hand-edit with any tool.
-- **Hyphens only, everywhere.** Every generated file uses single hyphens - no em-dashes, en-dashes, or typographic double-hyphens. This keeps output consistent across job boards, PDF readers, and ATS parsers that render Unicode dashes unpredictably.
+- **Hyphens in everything the writer writes.** Dates, separators, and prose use single hyphens - no em-dashes, en-dashes, or typographic double-hyphens - because ATS parsers render Unicode dashes unpredictably. The template's own bullet and separator glyphs are the exception; see [known limitations](docs/known-limitations.md).
+- **Plain-text export.** Each resume and cover letter also lands as a `.txt` built from the same source, for portals that parse text better than PDF.
 
 ## Components
 
@@ -34,7 +35,8 @@ This framework runs against external job boards and ATS APIs. Read this before y
   - **Direct ATS APIs**: Greenhouse, Lever, Ashby, SmartRecruiters, Workable
   - **Job board aggregator**: LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter via [python-jobspy](https://github.com/speedyapply/jobspy)
   Results pass through keyword, location, remote, and anti-target filters, then get ranked by a configurable scoring function and written to a daily digest.
-- **Resume Writer** (`.claude/agents/ats-resume-writer.md`) - generates ATS-optimized LaTeX resumes and cover letters from MCD + job description, with anti-target, stretch-fit, crown-jewel, summary-authenticity, and distinctive-career-fact guards running before any tailoring.
+- **Resume Writer** (`.claude/agents/ats-resume-writer.md`) - writes ATS-optimized LaTeX resumes and cover letters from MCD + job description, with anti-target, stretch-fit, crown-jewel, summary-authenticity, and distinctive-career-fact guards running before any tailoring. It only reads and writes files; it has no shell or web access.
+- **Templates and validator** (`templates/`, `tools/validate.ts`, `tools/export-text.ts`) - the LaTeX templates, the zero-fabrication validator, and the plain-text export, vendored unchanged from [ats-resume-agent](https://github.com/NullSpace-BitCradle/ats-resume-agent).
 - **Orchestration commands** (`.claude/commands/`) - slash commands that chain the pieces into one workflow.
 - **Application tracker** - plain-markdown file with four sections (`## Queued`, `## In Process`, `## Rejected`, `## Declined`) and an explicit status state machine: `queued -> applied -> ack -> screen -> interview -> offer | rejected | withdrew`. Rows move across sections as status changes. Resume and cover letter files are deleted when a row lands in `## Declined` - only materials for roles the user actually submitted are retained.
 
@@ -49,7 +51,7 @@ The framework separates code (this repo) from personal data (your user-data dire
   jobs/
     Job_Description-<Co>-<Role>.md  # saved JDs
   output/
-    Resume-<You>-<Co>-<Role>.pdf    # generated resumes
+    Resume-<You>-<Co>-<Role>.pdf    # generated resumes (+ .tex source, .txt export)
     CoverLetter-<You>-<Co>-<Role>.pdf
   discovery/
     config/                         # your target companies and anti-target rules
@@ -64,11 +66,35 @@ The framework separates code (this repo) from personal data (your user-data dire
     scrapers/                       # 6 scrapers (5 ATS + JobSpy)
     tests/
     config/*.example.yaml           # tracked examples
-  templates/                        # LaTeX resume + cover letter
+  templates/                        # LaTeX resume + cover letter (vendored)
+  tools/                            # validator + text export (vendored), sync check
+  examples/                         # fictional MCD + resume (non-tech, with a career break)
+  docs/                             # MCD conventions, known limitations
   config.example.yaml               # framework config template
 ```
 
 A `config.yaml` at the repo root (gitignored) maps the framework at every user-data path. Commands and the discovery tool read it at startup.
+
+## How the pieces fit
+
+```
+career-doc-builder ──> Master Career Document <── /sync-filters ──> discovery filters.yaml
+                              │
+/discover, /ingest ──> digest ┤
+                              ▼
+/apply:  fetch JD ─> duplicate check ─> save JD ─> ats-resume-writer (.tex only)
+                                                     │  STATUS: stop-anti-target / stop-stretch → ask you
+                                                     ▼
+         pdflatex ─> tools/validate.ts (must PASS) ─> tools/export-text.ts ─> tracker row in ## Queued
+                          │ FAIL: findings back to the writer, at most 3 rounds; never edits the MCD
+/submitted, /decline, /triage ──> move rows across tracker sections
+```
+
+**What this repo owns and what it borrows.** [ats-resume-agent](https://github.com/NullSpace-BitCradle/ats-resume-agent) is the single source of truth for the LaTeX templates and the validator/export tools. This repo carries byte-identical copies, pinned to an upstream commit in `tools/ats-vendor.json`, so `/apply` works offline and on any OS without installing a plugin. `bun tools/sync-ats.ts check` fails if a copy drifts from the pin; to take an upstream change, run `bun tools/sync-ats.ts pull <path to an ats-resume-agent checkout> --ref <tag>`, review the diff, and commit. Never edit the vendored files here.
+
+Everything jobhunter-specific stays here: `config.yaml` path resolution, the anti-target, lane-fit, stretch, crown-jewel, and distinctive-fact gates, career-break and recency handling, the duplicate check, and the tracker. The two agent prompts are jobhunter's own, built on ats-resume-agent's v1.3.0 writer and builder; when the upstream prompts improve, port the change by hand.
+
+Why vendoring rather than requiring the ats-resume-agent plugin: a plugin install would bring a second, differently-behaving `ats-resume-writer` and `career-doc-builder` into the same session, and the marketplace serves whatever upstream `master` holds rather than the version this repo was tested against. A pinned copy plus a drift check gives one source of truth without either problem.
 
 ## Quickstart
 
@@ -79,8 +105,9 @@ You need:
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - Python 3.10+ (required by python-jobspy)
 - LaTeX (for resume and cover letter PDF compilation)
+- [Bun](https://bun.sh) (runs the zero-fabrication validator and the text export; `/apply` will not offer a resume without it)
 
-If you already have a working LaTeX install with `pdflatex` and `xelatex` available, skip ahead to step 2. Otherwise, LaTeX install commands and the required TeX Live collections are in [Detailed setup: LaTeX](#detailed-setup-latex) at the bottom of this README.
+If you already have a working LaTeX install with `pdflatex` available, skip ahead to step 2. Otherwise, LaTeX install commands and the required TeX Live collections are in [Detailed setup: LaTeX](#detailed-setup-latex) at the bottom of this README.
 
 ### 2. Clone and configure
 
@@ -169,10 +196,13 @@ From Claude Code, use the orchestration commands. See the commands reference bel
 The MCD is the single source of truth. Every generated resume and cover letter pulls from it. Key design choices:
 
 - **18 structured sections** cover positioning, summaries (multiple versions for different role types), hybrid strengths, a full skills inventory, industry history, work experience with metrics, education, publications, key achievements, soft skills, project deep-dives, compliance frameworks, volunteer work, historical career objectives, address history, work preferences, customization notes, and a legacy-skills section that is never pulled into output.
-- **Positioning lanes**: the MCD names 3 to 8 positioning angles (for example, VM Focus, Cloud Security, GRC, Security Engineering, Solutions Engineering) and marks one as the default lane. The resume writer picks the lane that best matches the target job.
-- **Anti-Target Lanes**: categories of roles you should NOT apply to (certifications-as-hard-requirement, degree-as-hard-requirement, on-site-only, analyst-tier, production-K8s-at-scale, and similar). The resume writer blocks generation when the JD matches any of these. The discovery tool pattern-matches against the same list via `/sync-filters`.
-- **Crown Jewel markers**: you flag one or more verifiable, differentiated achievements. The resume writer enforces summary-paragraph placement when the target role type is applicable.
-- **Agent Notes**: inline `> **Agent Note:**` lines are binding instructions that the writer respects.
+- **Positioning lanes**: the MCD names 2 to 8 positioning angles (for example Clinical Leadership and Clinical Education for a nurse, or Platform Engineering and Developer Experience for an engineer) and marks one as the default lane. The resume writer picks the lane that best matches the target job.
+- **Anti-Target Lanes**: categories of roles you should NOT apply to (a license or degree you lack required as a hard requirement, on-site work outside your area, a level you are not targeting, a specialty you would have to reshape your experience into). The resume writer blocks generation when the JD matches any of these. The discovery tool pattern-matches against the same list via `/sync-filters`.
+- **Crown Jewel markers**: you flag one or more verifiable, differentiated achievements. The resume writer puts them in the summary paragraph for the lanes you name.
+- **Career breaks and recency**: a `### Career Break -- <reason>` entry is shown as its own resume entry, worded exactly as you wrote it. Recency is measured from the end of your most recent role, not from today, and you can change the window and cutoff.
+- **Agent Notes**: inline `> **Agent Note:**` lines are binding instructions that the writer respects. They are instructions, not evidence: anything that should appear on a resume has to be in the MCD body.
+
+[docs/mcd-conventions.md](docs/mcd-conventions.md) is the reference for every marker, and [examples/career-document.example.md](examples/career-document.example.md) is a short worked example (a nurse returning from a career break) with the resume built from it.
 
 Build the MCD once. Maintain it as a living document. Update it when you take a new role or pick up a new domain. The framework never regenerates it from scratch.
 
@@ -183,16 +213,18 @@ Build the MCD once. Maintain it as a living document. Update it when you take a 
 | `/discover [--verify \| --dry-run \| -v]` | Run a discovery scan, show the top new matches by score. |
 | `/ingest <urls \| file>` | Feed manually-found postings (LinkedIn, recruiter emails, etc.) through the same filter + score + candidate pipeline as discovery. Separate digest, read-only against the tracker. |
 | `/backfill [--days N] [--limit N] [--min-score N] [--max-score N]` | Walk back over past digests for matched jobs never logged to the tracker. For casting a wider net or filling gaps when new postings are light. |
-| `/apply <url \| company \| JD path>` | End-to-end: fetch JD, run lane-fit and anti-target checks, tailor resume and cover letter, log application into `## Queued` as `queued`. |
-| `/submitted <company> [role hint]` | Move a `queued` row to `## In Process` with status `applied` after you submit via the company portal. Also relocates the resume and cover letter PDFs into `output/applied/`. |
+| `/apply <url \| company \| JD path>` | End-to-end: fetch JD, check the tracker for duplicates, run lane-fit and anti-target checks, tailor resume and cover letter, compile, gate on the validator, export plain text, log application into `## Queued` as `queued`. |
+| `/submitted <company> [role hint]` | Move a `queued` row to `## In Process` with status `applied` after you submit via the company portal. Also relocates the resume and cover letter files (`.pdf`, `.tex`, `.txt`) into `output/applied/`. |
 | `/decline <company> [reason]` | Move a `queued` row to `## Declined` with status `withdrew` when you decide not to pursue it (posting closed, role turned out to be part-time, etc.). Deletes the resume and cover letter files; keeps the JD. |
 | `/triage [--limit N] [--days N]` | Classify recent mail in the job-hunt inbox, update tracker status forward along the state machine, move rows across sections as state transitions, schedule interviews on calendar. |
 | `/sync-filters [--check]` | Regenerate `discovery/config/filters.yaml` from the MCD's Anti-Target Lanes section (or check drift only). |
 
-`/apply` surfaces warnings before generating:
+`/apply` stops and asks you before going on when:
 
+- **Already tracked** - the role (same canonical URL, or same company and role) is already in the tracker. Checked before anything is generated.
 - **Anti-target detected** - JD matches a lane your MCD explicitly blocks. Application gets logged as `declined_anti_target` with the reason; no materials generated unless you confirm override.
-- **Stretch fit** - JD is more than one lane from your default or has a low tool-stack match. The agent names the closest lane it will work from and waits for confirmation.
+- **Stretch fit** - JD is more than one lane from your default or has a low skills match. The writer names the closest lane and `/apply` waits for your confirmation.
+- **Validator still failing** - after three fix rounds some claim still doesn't trace to the MCD. Nothing is logged; the findings are shown.
 
 ## Application tracker
 
@@ -387,13 +419,15 @@ Anti-target patterns use conjunction logic: any combination of `title_contains_a
 Before generating anything, the `ats-resume-writer` agent runs a gated sequence:
 
 1. **Read the MCD.** If missing, abort with a pointer to `career-doc-builder`.
-2. **Anti-target check.** If the JD matches any Anti-Target Lane, refuse generation unless the user explicitly confirms override.
-3. **Lane-fit scoring.** Rate the JD against each MCD positioning lane on role-type match, tool-stack match, framework/domain match, and tier alignment. If the best lane is a stretch (more than one lane from default, or tool-stack match under 50%), surface a stretch warning and wait for confirmation.
+2. **Anti-target check.** If the JD matches any Anti-Target Lane, stop and return; `/apply` asks you whether to override.
+3. **Lane-fit scoring.** Rate the JD against each MCD positioning lane on role type, skills match, domain, and level (using your field's own ladder). If the best lane is a stretch (more than one lane from default, or skills match under 50%), stop and return; `/apply` asks you whether to continue.
 4. **Crown Jewel applicability.** Determine if the MCD's crown-jewel achievements apply to this role type. For the lanes where the MCD says the crown jewel applies, placement in the summary paragraph is mandatory.
 5. **Summary Authenticity.** The opening title or descriptor in the summary must map to a role the user has genuinely held. If no authentic framing fits both the JD and the MCD, that is a signal the lane is a stretch and generation returns to step 3.
-6. **Distinctive Career Fact surfacing.** If the MCD has a distinctive career fact (for example, being a founding employee), it appears in the summary or early experience for senior-tier and above applications.
+6. **Distinctive Career Fact surfacing.** If the MCD has a distinctive career fact (for example, being a founding employee), it appears in the summary or early experience for applications at your usual level and above.
 
-Then generation proceeds: LaTeX with the template's commands, all interpolated values escaped, compiled with `pdflatex` for the resume and `xelatex` for the cover letter. The cover letter template uses `article` class rather than `letter` class so the header, body, and signature all flow on one page without the letter-class forced page break at `\opening` (xelatex is still required because the template uses `fontspec` + `\setmainfont{Bitstream Charter}` for ATS-grade ToUnicode mapping). The hyphens-only policy (see [What makes this different](#what-makes-this-different)) is enforced at the escape layer so no Unicode dashes reach the output. Auxiliary files are cleaned up; only `.tex` and `.pdf` remain.
+Then the writer picks roles by recency measured from the end of your most recent role, condenses rather than drops any role between two it shows, keeps career breaks as their own entries, and writes LaTeX with only the template's commands and every interpolated value escaped. The job description is treated as untrusted data: instructions inside it are ignored, and an override only counts when it comes from you through `/apply`.
+
+`/apply` then compiles both files with `pdflatex`, runs `tools/validate.ts` on each (the resume against the MCD alone, the cover letter against the MCD plus the JD), sends any findings back to the writer for at most three fix rounds, and exports a `.txt` of each once they pass. Auxiliary files are cleaned up; `.tex`, `.pdf`, and `.txt` remain.
 
 ## Development
 
@@ -406,6 +440,15 @@ python -m pytest tests/ -v
 ```
 
 238 tests cover all 6 scrapers (mocked), filter and scoring logic, state management, digest writing, cross-source deduplication, URL canonicalization, ingest filter rejection reasons (including local on-site allow-regex short-circuit), tracker parsing across the four-section Queued/In Process/Rejected/Declined layout, and JobSpy field mapping.
+
+The Bun side has its own tests, run from the repo root:
+
+```bash
+bun test tools/              # vendored files match the pin; example resume passes the validator; MCD conventions hold
+bun tools/sync-ats.ts check  # vendored templates and tools match tools/ats-vendor.json
+```
+
+The validator's own test suite lives upstream in ats-resume-agent, next to the example files it reads.
 
 ### Project layout
 
@@ -439,9 +482,23 @@ jobhunter-framework/
 │   │   └── jobspy.py                # LinkedIn / Indeed / Glassdoor aggregator
 │   ├── config/                      # tracked .example.yaml files
 │   └── tests/
-├── templates/
+├── templates/                       # vendored from ats-resume-agent; do not edit here
 │   ├── resume-template.tex
-│   └── cover-letter-template.tex
+│   ├── cover-letter-template.tex
+│   └── LICENSE-CC-BY-4.0.md
+├── tools/
+│   ├── validate.ts                  # zero-fabrication validator (vendored)
+│   ├── export-text.ts               # plain-text export (vendored)
+│   ├── latex.ts                     # shared LaTeX parsing (vendored)
+│   ├── sync-ats.ts                  # check / pull the vendored files against the pin
+│   ├── ats-vendor.json              # upstream commit + file hashes
+│   └── *.test.ts                    # bun test tools/
+├── examples/
+│   ├── career-document.example.md   # fictional MCD: nurse with a career break
+│   └── resume.example.tex           # resume generated from it
+├── docs/
+│   ├── mcd-conventions.md           # MCD markers the writer reads
+│   └── known-limitations.md
 ├── config.example.yaml              # framework config template
 ├── applications.template.md         # tracker schema
 ├── CLAUDE.md                        # Claude Code project instructions
@@ -476,13 +533,14 @@ Required TeX Live collections beyond base `texlive-latex-base`:
 
 - `texlive-latex-recommended` provides `ragged2e` and `microtype`
 - `texlive-latex-extra` provides `tabularx`, `enumitem`, and `titlesec`
-- `texlive-fonts-extra` provides `fontawesome5`, `CormorantGaramond`, and `charter`
+- `texlive-fonts-extra` provides `fontawesome`, `fontawesome5`, `CormorantGaramond`, and `charter`
+- `cm-super` provides the T1 fonts the cover letter template uses; without it the cover letter fails on Ubuntu and WSL
 
 Debian / Ubuntu / WSL:
 
 ```bash
 sudo apt-get install texlive-latex-base texlive-latex-recommended \
-  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra
+  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra cm-super
 ```
 
 macOS:
@@ -491,7 +549,9 @@ macOS:
 brew install --cask mactex-no-gui
 ```
 
-Both `pdflatex` (for the resume) and `xelatex` (for the cover letter) ship with those bundles. The cover letter template uses `fontspec` + `\setmainfont{Bitstream Charter}`, which is why `xelatex` is required for it specifically.
+Windows: [MiKTeX](https://miktex.org) works; let it install missing packages on first use.
+
+Both templates compile with `pdflatex`, which ships with all of these. `xelatex` is not needed.
 
 If `pdflatex` complains about a missing `.sty` file on first compile, install the individual package via `tlmgr install <pkg>` or `tlmgr --usermode install <pkg>` (no root required).
 
@@ -499,7 +559,7 @@ If `pdflatex` complains about a missing `.sty` file on first compile, install th
 
 - Code in this repository (Python scanners, slash commands, tests, agent prompts, documentation, templates authored for this project): MIT.
 - Agent prompts under `.claude/agents/` and `.claude/commands/` are treated as software for licensing purposes and fall under the same MIT grant as the code.
-- The LaTeX resume template (`templates/resume-template.tex`) is CC-BY-4.0, based on work by Michael Lustfield. The cover letter template (`templates/cover-letter-template.tex`) was authored for this project and is MIT.
+- `templates/` and `tools/{validate,export-text,latex}.ts` are vendored unchanged from [ats-resume-agent](https://github.com/NullSpace-BitCradle/ats-resume-agent) (MIT, same copyright holder). The LaTeX resume template (`templates/resume-template.tex`) is CC-BY-4.0, based on work by Michael Lustfield; see `templates/LICENSE-CC-BY-4.0.md`. The cover letter template is MIT.
 - Example config files (`*.example.yaml`, `applications.template.md`) are MIT.
 - Your personal content (Master Career Document, job descriptions, generated resumes and cover letters, application tracker) lives outside the repo per the user-data separation. Those files are yours; no license from this repository applies to them.
 
@@ -507,7 +567,7 @@ See [LICENSE](LICENSE) for the MIT text and [NOTICE](NOTICE) for third-party att
 
 ## Related repositories
 
-- [ats-resume-agent](https://github.com/NullSpace-BitCradle/ats-resume-agent) - the resume / cover letter generation agent. Bundled here as `.claude/agents/ats-resume-writer.md` and used by `/apply`; the standalone repo is for users who want only the resume writer without the discovery / tracker layer.
+- [ats-resume-agent](https://github.com/NullSpace-BitCradle/ats-resume-agent) - the resume / cover letter generation agent, and the source of truth for this repo's templates and validator tools (see [How the pieces fit](#how-the-pieces-fit)). The standalone repo, also installable as a Claude Code plugin, is for users who want only the resume writer without the discovery / tracker layer.
 
 ## Contributing
 
