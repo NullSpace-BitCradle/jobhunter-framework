@@ -1,0 +1,13 @@
+{
+  "upstream": "https://github.com/NullSpace-BitCradle/ats-resume-agent",
+  "ref": "fix/crlf-line-endings",
+  "commit": "35861b0f55ab156f4aa68180fbc28e691ffe573a",
+  "files": {
+    "templates/resume-template.tex": "d2fd6d3cc062ad4471a917ba0b47997a0cc8d1236aece6c7135b9e01fcffa268",
+    "templates/cover-letter-template.tex": "82a26354f57f422dd3df34cb4e8bb519789ad5c4fa23612d5ef0679c5a650b92",
+    "templates/LICENSE-CC-BY-4.0.md": "3992457462884e4f8993f6efc640f36418bcc288018227f6b93fef6dd6062a8d",
+    "tools/latex.ts": "6c259ec981a745fd7312847f4e36efcb6237760b6e10f88e11ee9f8195271063",
+    "tools/validate.ts": "d2c0d93bf271816c223a6ac2739d934d24ab4b8940b436d0793dba6a8b453707",
+    "tools/export-text.ts": "f67221e9334741bbd04651b8b64c2ec3c1cf38c4acebf58b4ce1e39447e6665e"
+  }
+}

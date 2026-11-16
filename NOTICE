@@ -7,12 +7,24 @@ This product includes the following third-party works:
 
 ---
 
+Files vendored from ats-resume-agent
+(templates/resume-template.tex, templates/cover-letter-template.tex,
+templates/LICENSE-CC-BY-4.0.md, tools/validate.ts, tools/export-text.ts,
+tools/latex.ts)
+- Source: https://github.com/NullSpace-BitCradle/ats-resume-agent
+- License: MIT (same copyright holder as this repository), except the
+  resume template, which is CC-BY-4.0 as described below.
+- Copied unmodified. tools/ats-vendor.json pins the upstream commit and
+  `bun tools/sync-ats.ts check` verifies the copies still match it.
+
 LaTeX resume template (templates/resume-template.tex)
 - Original author: Michael Lustfield
+- Source: https://github.com/MTecknology/latex-resume
 - License: Creative Commons Attribution 4.0 International (CC-BY-4.0)
 - License text: https://creativecommons.org/licenses/by/4.0/legalcode.txt
-- Modifications: adapted for use with the ATS Resume Writer agent;
-  ATS-compatible Unicode glyph mapping added.
+- Modifications (made in ats-resume-agent): adapted for use with the ATS
+  Resume Writer agent; ATS-compatible Unicode glyph mapping added. The full
+  list is in templates/LICENSE-CC-BY-4.0.md.
 
 The CC-BY-4.0 attribution and modification notice are also preserved
 in the header of templates/resume-template.tex itself.
@@ -27,8 +39,3 @@ python-jobspy
 - LinkedIn, Indeed, Glassdoor, Google, and ZipRecruiter are accessed
   exclusively through this library. See README.md "Responsible use"
   for ToS considerations.
-
----
-
-Cover letter template (templates/cover-letter-template.tex)
-- Authored for this project. MIT, same as the rest of the code.
