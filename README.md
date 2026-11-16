@@ -34,7 +34,7 @@ This framework runs against external job boards and ATS APIs. Read this before y
   - **Direct ATS APIs**: Greenhouse, Lever, Ashby, SmartRecruiters, Workable
   - **Job board aggregator**: LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter via [python-jobspy](https://github.com/speedyapply/jobspy)
   Results pass through keyword, location, remote, and anti-target filters, then get ranked by a configurable scoring function and written to a daily digest.
-- **Resume Writer** (`.claude/agents/ats-resume-writer.md`) - generates ATS-optimized LaTeX resumes and cover letters from MCD + job description, with anti-target, stretch-fit, crown-jewel, summary-authenticity, and founding-employee guards running before any tailoring.
+- **Resume Writer** (`.claude/agents/ats-resume-writer.md`) - generates ATS-optimized LaTeX resumes and cover letters from MCD + job description, with anti-target, stretch-fit, crown-jewel, summary-authenticity, and distinctive-career-fact guards running before any tailoring.
 - **Orchestration commands** (`.claude/commands/`) - slash commands that chain the pieces into one workflow.
 - **Application tracker** - plain-markdown file with four sections (`## Queued`, `## In Process`, `## Rejected`, `## Declined`) and an explicit status state machine: `queued -> applied -> ack -> screen -> interview -> offer | rejected | withdrew`. Rows move across sections as status changes. Resume and cover letter files are deleted when a row lands in `## Declined` - only materials for roles the user actually submitted are retained.
 

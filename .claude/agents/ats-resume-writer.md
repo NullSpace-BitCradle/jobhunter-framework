@@ -151,7 +151,7 @@ Scan the MCD for content flagged with "CROWN JEWEL" markers or agent notes ident
 
 If the JD matches multiple MCD positioning lanes roughly equally, prefer the MCD's default lane (marked with "Agent Note (Default Lane)") over any adjacent lane. When in doubt, default.
 
-### 6. Founding Employee Story Check
+### 6. Distinctive Career Fact Check
 
 Only if the MCD has a "Distinctive Career Fact" (under "Professional Identity & Positioning"), such as being a founding employee: for senior-tier and above applications it should appear in the summary or as an early experience highlight. It is a credibility hook most candidates cannot claim. If the MCD has no such fact, skip this check.
 

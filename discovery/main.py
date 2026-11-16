@@ -18,7 +18,9 @@ import re
 import sys
 from datetime import datetime, date, timezone, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+LOCAL_TZ = ZoneInfo("America/Phoenix")
 
 import yaml
 
@@ -696,7 +698,7 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_
         is_match=False and anti_target_reason set -> anti-target
         is_match=False and anti_target_reason="" -> silently filtered (not in digest)
     """
-    today_str = datetime.now().astimezone().date().isoformat()
+    today_str = datetime.now(LOCAL_TZ).date().isoformat()
     digest_dir.mkdir(parents=True, exist_ok=True)
     out_path = digest_dir / f"digest-{today_str}.md"
 
@@ -874,7 +876,7 @@ def write_ingest_digest(
         is_match=False, anti_target_reason!="" -> anti-target hit
         is_match=False, filter_reason!=""     -> filtered by match_rules; reason explains which
     """
-    now = datetime.now().astimezone()
+    now = datetime.now(LOCAL_TZ)
     today_str = now.date().isoformat()
     stamp = now.strftime("%H%M%S")
     digest_dir.mkdir(parents=True, exist_ok=True)
@@ -1196,7 +1198,7 @@ def write_backfill_digest(
     digest_dir: Path,
 ) -> Path:
     """Render the backfill digest with aggregated sighting info per posting."""
-    now = datetime.now().astimezone()
+    now = datetime.now(LOCAL_TZ)
     today_str = now.date().isoformat()
     stamp = now.strftime("%H%M%S")
     digest_dir.mkdir(parents=True, exist_ok=True)
@@ -1275,7 +1277,7 @@ def run_backfill(
 
     cutoff: date | None = None
     if days > 0:
-        cutoff = datetime.now().astimezone().date() - timedelta(days=days)
+        cutoff = datetime.now(LOCAL_TZ).date() - timedelta(days=days)
 
     digest_files = sorted(digest_dir.glob("digest-*.md"))
     all_entries: list[dict] = []
