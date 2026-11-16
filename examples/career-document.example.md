@@ -81,22 +81,27 @@ Registered nurse with 11 years of acute care experience, including six years as 
 
 ## Notes for Resume Customization
 
+<!-- Everything in this section is guidance, so it is written as agent notes:
+the validator ignores note text, which keeps words like "nurse manager" or
+"CCRN" here from backing a claim on the resume. -->
+
 ### Positioning Options
 
-- Clinical Leadership: charge nurse and nurse manager roles. Lead with unit leadership and the error reduction.
-- Clinical Education: clinical educator and preceptor coordinator roles. Lead with precepting.
+> **Agent Note:** Positioning lanes:
+> - Clinical Leadership: charge nurse and nurse manager roles. Lead with unit leadership and the error reduction.
+> - Clinical Education: clinical educator and preceptor coordinator roles. Lead with precepting.
 
 > **Agent Note (Default Lane):** Clinical Leadership
 
 ### Anti-Target Lanes
 
-- ICU or emergency department staff nurse roles: no critical care experience to tailor toward
-- Roles that require an active CCRN certification as a hard requirement
+> **Agent Note:** Do not tailor for roles that match any of these:
+> - ICU or emergency department staff nurse roles: no critical care experience to tailor toward
+> - Roles that require an active CCRN certification as a hard requirement
 
 ### Recency
 
-- Recency window: 10 years
-- Role cutoff: none
+> **Agent Note:** Recency window: 10 years. Role cutoff: none.
 
 ---
 

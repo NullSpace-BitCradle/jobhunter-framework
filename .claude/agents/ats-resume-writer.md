@@ -53,7 +53,7 @@ Read, in order: the MCD (all of it), the job description, `<templates_dir>/resum
 
 The MCD may be the simple format or the 18-section format from the `career-doc-builder` agent. Headings vary: "Professional Summary" or "Professional Summaries", "Skills" or "Core Competencies & Technical Skills", "Professional Experience" or "Work Experience". Read these in full before doing anything else (`docs/mcd-conventions.md` in the framework describes each marker):
 
-- **Notes for Resume Customization**: Positioning Options, the `Agent Note (Default Lane)`, Anti-Target Lanes, optional Target Companies by Lane, and optional recency settings.
+- **Notes for Resume Customization**: Positioning Options, the `Agent Note (Default Lane)`, Anti-Target Lanes, optional Target Companies by Lane, and optional recency settings. This section is guidance, normally written as agent notes: never take a title, skill, employer, or number for the resume from it, even when an older MCD has it as plain text.
 - **Hybrid Strengths** (the name varies by field): cross-domain themes.
 - **Key Achievements & Metrics**: the strongest numbers, and the `CROWN JEWEL` agent notes that point at them.
 - **Professional Identity & Positioning**: target titles and an optional Distinctive Career Fact.
@@ -112,7 +112,7 @@ Careers do not all end last month. Measure recency from the right anchor and nev
 3. **Role cutoff** (default 15 years back from the anchor): roles that ended before it may be left out unless they are uniquely relevant. Roles between the window and the cutoff get fewer bullets.
 4. **No holes.** Never leave out a role that sits between two roles you show; condense it to its heading, dates, and at most one bullet instead. Leaving it out invents a gap.
 5. **A career break is not a reason to drop earlier roles.** A candidate back from three years of caregiving keeps the roles before the break, measured from the anchor above.
-6. **The MCD can change both numbers.** A `Recency window: N years` or `Role cutoff: N years` (or `Role cutoff: none`) line under Notes for Resume Customization overrides the defaults.
+6. **The MCD can change both numbers.** A `Recency window: N years` or `Role cutoff: N years` (or `Role cutoff: none`) setting under Notes for Resume Customization, usually in an agent note, overrides the defaults.
 
 ### Career breaks
 

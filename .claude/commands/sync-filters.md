@@ -51,7 +51,7 @@ If config is absent, default to `Master_Career_Document.md` in the project root 
 
 ## Step 2 - Read the MCD Anti-Target Lanes
 
-Read the MCD. Find the "Anti-Target Lanes" subsection (typically under "Notes for Resume Customization"; format in `docs/mcd-conventions.md`). Extract every anti-target lane entry. Each entry describes a category of role the user should NOT apply to, with a brief explanation of why.
+Read the MCD. Find the "Anti-Target Lanes" subsection (typically under "Notes for Resume Customization"; format in `docs/mcd-conventions.md`). Extract every anti-target lane entry: one `> - ` line each inside the subsection's agent-note block, or one plain `- ` bullet each in an MCD that predates that convention. Each entry describes a category of role the user should NOT apply to, with a brief explanation of why.
 
 ## Step 3 - Read the current filters.yaml (if present)
 

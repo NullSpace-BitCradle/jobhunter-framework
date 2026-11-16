@@ -122,11 +122,11 @@ The writer ends with a `STATUS:` block. Act on it:
 
 Run each command from the repository root and judge it by its exit code, not by any agent's description of it. For each `.tex` file the writer produced (`<base>` is its name without `.tex`):
 
-1. **Compile** twice (for cross-references), non-interactively so an error can't hang the run:
+1. **Compile** twice (for cross-references), non-interactively so an error can't hang the run. Delete the previous PDF first, so a failed compile in a fix round can't leave an old PDF that no longer matches the `.tex`:
    ```bash
-   cd "<output_dir>" && pdflatex -interaction=nonstopmode -halt-on-error "<base>.tex" && pdflatex -interaction=nonstopmode -halt-on-error "<base>.tex"
+   cd "<output_dir>" && rm -f "<base>.pdf" && pdflatex -interaction=nonstopmode -halt-on-error "<base>.tex" && pdflatex -interaction=nonstopmode -halt-on-error "<base>.tex"
    ```
-   If `<base>.pdf` exists and is not empty, it compiled; don't go looking for packages. Otherwise read the `!` lines in `<base>.log`. A missing package: tell the user which one and how to install it (`tlmgr install <package>`, or the MiKTeX console on Windows) and stop. A LaTeX error in the body: send the error lines to the writer as findings (step 3 below).
+   It compiled when that command exits 0 and `<base>.pdf` exists and is not empty; don't go looking for packages then. Otherwise read the `!` lines in `<base>.log`. A missing package: tell the user which one and how to install it (`tlmgr install <package>`, or the MiKTeX console on Windows) and stop. A LaTeX error in the body: send the error lines to the writer as findings (step 3 below).
 2. **Clean up** the auxiliary files for that file only:
    ```bash
    rm -f "<output_dir>/<base>".{aux,log,out,toc,fls,fdb_latexmk}
@@ -136,7 +136,7 @@ Run each command from the repository root and judge it by its exit code, not by 
    bun tools/validate.ts "<output_dir>/<resume base>.tex" "<mcd_path>"
    bun tools/validate.ts "<output_dir>/<cover base>.tex" "<mcd_path>" "<jd_path>"
    ```
-   Exit 0 prints `PASS`. Exit 1 prints `FAIL` and one finding per unsupported claim: invoke the writer again with the same paths plus the findings verbatim and the instruction to fix only those claims, then recompile and revalidate. Allow at most 3 fix rounds. Exit 2 means the validator could not read its input; show the message and stop.
+   Exit 0 prints `PASS`. Exit 1 prints `FAIL` and one finding per unsupported claim: invoke the writer again with the same paths plus the findings verbatim and the instruction to fix only those claims, then recompile (step 1, which deletes the old PDF) and revalidate. Allow at most 3 fix rounds. Exit 2 means the validator could not read its input; show the message and stop.
    **Never edit the MCD, and never add the JD as a source for the resume, to make validation pass.** If the files still fail after 3 rounds, stop: leave them in place for the user to inspect, do not log a `queued` row, and report the remaining findings.
 4. **Export** plain text once both files pass, then check the resume export too:
    ```bash

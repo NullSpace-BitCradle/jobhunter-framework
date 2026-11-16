@@ -200,7 +200,7 @@ The MCD is the single source of truth. Every generated resume and cover letter p
 - **Anti-Target Lanes**: categories of roles you should NOT apply to (a license or degree you lack required as a hard requirement, on-site work outside your area, a level you are not targeting, a specialty you would have to reshape your experience into). The resume writer blocks generation when the JD matches any of these. The discovery tool pattern-matches against the same list via `/sync-filters`.
 - **Crown Jewel markers**: you flag one or more verifiable, differentiated achievements. The resume writer puts them in the summary paragraph for the lanes you name.
 - **Career breaks and recency**: a `### Career Break -- <reason>` entry is shown as its own resume entry, worded exactly as you wrote it. Recency is measured from the end of your most recent role, not from today, and you can change the window and cutoff.
-- **Agent Notes**: inline `> **Agent Note:**` lines are binding instructions that the writer respects. They are instructions, not evidence: anything that should appear on a resume has to be in the MCD body.
+- **Agent Notes**: inline `> **Agent Note:**` lines are binding instructions that the writer respects. They are instructions, not evidence: anything that should appear on a resume has to be in the MCD body, and guidance that must never appear on one (lanes, anti-targets, recency settings) is written as notes so the validator can't count it as experience.
 
 [docs/mcd-conventions.md](docs/mcd-conventions.md) is the reference for every marker, and [examples/career-document.example.md](examples/career-document.example.md) is a short worked example (a nurse returning from a career break) with the resume built from it.
 
@@ -515,7 +515,7 @@ What works today:
 - [x] Plain-markdown applications tracker with 4-section state machine
 - [x] Job-board aggregation (LinkedIn / Indeed / Glassdoor / Google / ZipRecruiter via JobSpy) and cross-source dedup
 - [x] Title-suffix normalization for backfill (collapses `(remote)` / `- Remote` variants of the same role)
-- [x] Agent paths entirely config-driven (slash commands self-locate via `git rev-parse --show-toplevel`; agent prompts resolve repository root explicitly before reading `config.yaml`)
+- [x] Agent paths entirely config-driven (slash commands self-locate via `git rev-parse --show-toplevel` and pass resolved absolute paths to the agents, which have no shell)
 
 Planned, no committed date:
 

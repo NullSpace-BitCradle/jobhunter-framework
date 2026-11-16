@@ -62,7 +62,7 @@ The writer runs as a sub-agent. When it hits an anti-target or a stretch fit it 
 
 ## The validator checks values, not sentences
 
-`tools/validate.ts` proves every number, date, employer, title, degree, certification, and skill-table entry traces to your MCD. It cannot judge whether a sentence inflates a claim ("led" where the MCD says "helped"), and it only checks skills inside the skills table. The writer is told to keep summary wording faithful; read the summary yourself before you submit.
+`tools/validate.ts` proves every number, date, employer, title, degree, certification, and skill-table entry traces to your MCD. It cannot judge whether a sentence inflates a claim ("led" where the MCD says "helped"), and it only checks skills inside the skills table. A cover letter has no headings or skills table, so for letters the check is numbers only (a number may also come from the job description when its sentence shares a word with the posting's). The writer is told to keep summary wording faithful; read the summary yourself before you submit.
 
 ## Filing a new limitation
 

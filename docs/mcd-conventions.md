@@ -10,16 +10,27 @@ The validator (`tools/validate.ts`) treats the MCD body as evidence and ignores 
 
 - **Agent notes say what to do.** `> **Agent Note:** ...` lines are binding instructions for the writer.
 - **Anything that should appear on a resume lives in the body.** A metric, a reason, or a phrase that exists only inside a note fails validation, and the writer leaves it out.
+- **Guidance that should never appear on a resume lives in notes.** The reverse holds too: words in the body back claims. An anti-target bullet saying "roles that require an active CCRN" would let `CCRN` pass in a skills row, "Role cutoff: 15 years" would back "15 years of experience", and a lane naming "nurse manager roles" would back a Nurse Manager title. So everything under `## Notes for Resume Customization` is written as quoted agent-note blocks, a `>` on every line:
+
+```markdown
+### Anti-Target Lanes
+
+> **Agent Note:** Do not tailor for roles that match any of these:
+> - ICU or emergency department staff nurse roles: no critical care experience to tailor toward
+> - Roles that require an active CCRN certification as a hard requirement
+```
+
+A note block runs until the next blank line, so keep each one contiguous. If your MCD predates this convention and has plain bullets there, convert them (the `career-doc-builder` re-run offers to); until then those words can back claims they shouldn't.
 
 ## Markers
 
 | Marker | Where | What it does |
 |---|---|---|
-| `### Positioning Options` | under `## Notes for Resume Customization` | 2 to 8 lanes the writer chooses from. One bullet per lane: name, role types, what to lead with. |
-| `> **Agent Note (Default Lane):** <lane>` | after the Positioning Options list | The lane the writer prefers when a job fits several equally. |
-| `### Anti-Target Lanes` | under `## Notes for Resume Customization` | Roles not to apply to, one bullet each with a reason. The writer refuses to tailor for a match and `/apply` logs it as `declined_anti_target`; `/sync-filters` turns the list into discovery filters. |
-| `### Target Companies by Lane` | under `## Notes for Resume Customization` | Optional. Employers or kinds of employers per lane. |
-| `### Recency` | under `## Notes for Resume Customization` | Optional. `- Recency window: N years` and `- Role cutoff: N years` (or `none`). See below. |
+| `### Positioning Options` | under `## Notes for Resume Customization`, as a note block | 2 to 8 lanes the writer chooses from. One `> -` line per lane: name, role types, what to lead with. |
+| `> **Agent Note (Default Lane):** <lane>` | after the Positioning Options block | The lane the writer prefers when a job fits several equally. |
+| `### Anti-Target Lanes` | under `## Notes for Resume Customization`, as a note block | Roles not to apply to, one `> -` line each with a reason. The writer refuses to tailor for a match and `/apply` logs it as `declined_anti_target`; `/sync-filters` turns the list into discovery filters. |
+| `### Target Companies by Lane` | under `## Notes for Resume Customization`, as a note block | Optional. Employers or kinds of employers per lane. |
+| `### Recency` | under `## Notes for Resume Customization`, as a note | Optional. `> **Agent Note:** Recency window: N years. Role cutoff: N years.` (or `Role cutoff: none`). See below. |
 | `> **Agent Note: CROWN JEWEL** ...` | right after the achievement it points at | Puts that achievement in the resume summary for the lanes it names. The note points; the facts stay in the bullet above it. |
 | `- Distinctive Career Fact: ...` | under `## Professional Identity & Positioning` | Optional. One fact about your path few candidates share; the writer surfaces it at your usual level and above. |
 | `### Career Break -- <reason>` | under `## Work Experience`, in date order | Shown on the resume as its own entry. See below. |

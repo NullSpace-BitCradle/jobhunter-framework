@@ -65,6 +65,66 @@ describe("career break convention", () => {
   });
 });
 
+describe("Notes for Resume Customization are written as agent notes", () => {
+  const guidance = (asNotes: boolean) => {
+    const lines = [
+      "Clinical Leadership: charge nurse and nurse manager roles",
+      "Roles that require an active CCRN certification as a hard requirement",
+      "Recency window: 10 years. Role cutoff: 15 years",
+      "Target companies: Riverside Health",
+    ];
+    const body = asNotes ? lines.map((l, i) => (i === 0 ? `> **Agent Note:** ${l}` : `> - ${l}`)) : lines.map((l) => `- ${l}`);
+    return [
+      "## Work Experience",
+      "",
+      "### Charge Nurse -- Northfield Regional Hospital",
+      "",
+      "**Dates:** Mar 2016 - Aug 2022",
+      "",
+      "- Led a telemetry unit",
+      "",
+      "## Notes for Resume Customization",
+      "",
+      ...body,
+      "",
+    ].join("\n");
+  };
+  const inflated = [
+    "\\begin{document}",
+    "\\tinysection{Summary}",
+    "Nurse with 15 years of experience.",
+    "\\section{Skills}",
+    "\\begin{tabularx}{\\textwidth}{>{\\bfseries}l@{\\hspace{12pt}} X}",
+    "Certifications & CCRN \\\\",
+    "\\end{tabularx}",
+    "\\section{Experience}",
+    "\\headingBf{Riverside Health}{Mar 2016 - Aug 2022}",
+    "\\headingIt{Nurse Manager}{}",
+    "\\end{document}",
+    "",
+  ].join("\n");
+
+  test("as plain bullets, guidance words back claims the candidate never made", () => {
+    expect(validate(inflated, guidance(false)).findings).toEqual([]);
+  });
+
+  test("as agent notes, the same words back nothing", () => {
+    const found = kinds(validate(inflated, guidance(true)));
+    expect(found).toContain("number:15");
+    expect(found).toContain("skill:CCRN");
+    expect(found).toContain("heading:Riverside Health");
+    expect(found).toContain("heading:Nurse Manager");
+  });
+
+  test("the example MCD keeps its guidance in notes", () => {
+    const notes = mcd
+      .slice(mcd.indexOf("## Notes for Resume Customization"), mcd.indexOf("## Legacy"))
+      .replace(/<!--[\s\S]*?-->/g, "");
+    const content = notes.split("\n").filter((l) => l.trim() && !/^#{1,6}\s/.test(l) && !/^\s*>/.test(l) && l.trim() !== "---");
+    expect(content).toEqual([]);
+  });
+});
+
 describe("crown jewel convention", () => {
   const work = [
     "## Work Experience",
