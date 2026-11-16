@@ -104,8 +104,14 @@ describe("Notes for Resume Customization are written as agent notes", () => {
     "",
   ].join("\n");
 
-  test("as plain bullets, guidance words back claims the candidate never made", () => {
-    expect(validate(inflated, guidance(false)).findings).toEqual([]);
+  // Since ats-resume-agent f42a648 the validator excludes guidance sections from
+  // the evidence itself, so plain bullets no longer leak either. Agent notes stay
+  // the convention: older vendored validators did leak.
+  test("as plain bullets, guidance words still back nothing (validator excludes the section)", () => {
+    const found = kinds(validate(inflated, guidance(false)));
+    expect(found).toContain("number:15");
+    expect(found).toContain("skill:CCRN");
+    expect(found).toContain("heading:Nurse Manager");
   });
 
   test("as agent notes, the same words back nothing", () => {
