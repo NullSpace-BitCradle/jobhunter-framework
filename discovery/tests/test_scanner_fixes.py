@@ -202,11 +202,11 @@ class TestTimezone:
         pytest.importorskip("zoneinfo")
         try:
             import zoneinfo
-            zoneinfo.ZoneInfo("America/New_York")
+            zoneinfo.ZoneInfo("Asia/Tokyo")
         except Exception:
             pytest.skip("no tz database available (install tzdata)")
-        configure_timezone({"discovery": {"timezone": "America/New_York"}})
-        assert local_now().utcoffset() == timedelta(hours=-7)
+        configure_timezone({"discovery": {"timezone": "Asia/Tokyo"}})
+        assert local_now().utcoffset() == timedelta(hours=9)
 
     def test_bad_zone_falls_back_to_system(self):
         configure_timezone({"discovery": {"timezone": "Not/A_Zone"}})
