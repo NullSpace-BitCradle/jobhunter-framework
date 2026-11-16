@@ -26,7 +26,8 @@ Thanks for the interest. Reading this means you might be about to spend your tim
 - Run the existing suite locally and confirm it still passes:
   ```bash
   cd discovery
-  python3 -m pytest -q
+  pip install -r requirements-dev.txt
+  python3 -m pytest -q      # Windows: py -3 -m pytest -q
   ```
 - Follow the hyphens-only convention. The framework refuses em-dashes, en-dashes, and double-hyphens in generated output; the repo itself is held to the same standard.
 - If you touch a scraper, note the ATS / board version you tested against in the PR description. The aggregator path (JobSpy) breaks regularly when LinkedIn / Indeed change their HTML.

@@ -1,0 +1,13 @@
+{
+  "upstream": "https://github.com/NullSpace-BitCradle/ats-resume-agent",
+  "ref": "v1.3.0",
+  "commit": "94b45005e19c6cf35ab09aaee872113708078600",
+  "files": {
+    "templates/resume-template.tex": "4f7e63b53cd98c2c5dc73edeefee2e3bd09c082cd0a1985227bdbfa4fdccbab0",
+    "templates/cover-letter-template.tex": "82a26354f57f422dd3df34cb4e8bb519789ad5c4fa23612d5ef0679c5a650b92",
+    "templates/LICENSE-CC-BY-4.0.md": "3992457462884e4f8993f6efc640f36418bcc288018227f6b93fef6dd6062a8d",
+    "tools/latex.ts": "04d112264fabb567b6c7c91b0fb9ea3920e9a324e0ea420f7aa0fa4b754a80ac",
+    "tools/validate.ts": "25bb2a05cdc3f93764ea6e04a51b0d44dc88fe9fd55fc82a56f0882fd7b4efec",
+    "tools/export-text.ts": "ba4949f70f3f79495c35aae4949bcda9f0b768ee70f98de3ebadda6dfa9422e3"
+  }
+}

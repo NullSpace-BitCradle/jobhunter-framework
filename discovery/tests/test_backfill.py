@@ -81,7 +81,7 @@ HISTORICAL_DIGEST = """# Job Discovery Digest — 2026-04-10
 
 
 def _write(path: Path, text: str) -> Path:
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     return path
 
 
@@ -206,7 +206,8 @@ class TestLoadTrackerIdentityKeys:
         urls, pairs = load_tracker_identity_keys(tracker)
         assert "https://jobs.lever.co/AcmeLending/abc" in urls
         assert ("acme lending", "director of security operations") in pairs
-        assert ("globex streaming", "security engineer (l4)") in pairs
+        # Level markers survive normalization (punctuation becomes a space).
+        assert ("globex streaming", "security engineer l4") in pairs
 
     def test_status_filter(self, tmp_path):
         tracker = _tracker(tmp_path, [

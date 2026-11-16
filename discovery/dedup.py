@@ -22,7 +22,32 @@ _COMPANY_SUFFIXES = re.compile(
 # Extra whitespace / punctuation cleanup
 _EXTRA_WS = re.compile(r"\s+")
 _NON_ALNUM = re.compile(r"[^\w\s]")
-_PARENS = re.compile(r"\(.*?\)")
+
+# Location / work-arrangement vocabulary. Used in two places: parenthesized
+# groups ("(Remote, USA)") are dropped wherever they appear, and a trailing
+# " - X" / " | X" segment is dropped only when it is made up ENTIRELY of these
+# words. Level markers like "(L4)" and role qualifiers like "- Detection" or
+# "- Remote Access Security" are NOT in this vocabulary and are preserved.
+_LOC_WORDS = (
+    r"remote|hybrid|onsite|on-site|on site|usa|us|u\.s\.a?\.?|united states|"
+    r"americas|emea|apac|na|east coast|west coast|north america|"
+    r"est|pst|cst|mst|edt|pdt|cdt|mdt"
+)
+
+_LOC_ARRANGEMENT_PARENS = re.compile(
+    r"\s*\([^)]*\b(?:" + _LOC_WORDS + r")\b[^)]*\)",
+    re.IGNORECASE,
+)
+
+# A whole segment of location words joined by commas, slashes, ampersands,
+# hyphens or "and": "Remote", "US Remote", "Remote, USA", "Hybrid / EMEA".
+_LOC_SEGMENT = re.compile(
+    r"^(?:" + _LOC_WORDS + r")(?:[\s,/&\-]+(?:and\s+)?(?:" + _LOC_WORDS + r"))*$",
+    re.IGNORECASE,
+)
+
+# Title separators: spaced hyphen / en dash / em dash, or a pipe.
+_TITLE_SEP = re.compile(r"\s+[-–—]\s+|\s*\|\s*")
 
 
 def normalize_company(name: str) -> str:
@@ -35,53 +60,62 @@ def normalize_company(name: str) -> str:
 
 
 def normalize_title(title: str) -> str:
-    """Normalize a job title for fuzzy matching."""
-    title = title.lower().strip()
-    # Remove common filler like location hints in parens
-    title = _PARENS.sub("", title)
-    title = _NON_ALNUM.sub(" ", title)
-    title = _EXTRA_WS.sub(" ", title).strip()
-    return title
+    """Normalize a job title for fuzzy matching. The ONE title normalizer.
+
+    1. Drop parenthesized groups that mention a location or work arrangement
+       ("(Remote)", "(Remote, USA)"). Parens with level markers such as "(L4)"
+       are kept so an L4 posting does not collapse into an L5 one.
+    2. Drop trailing " - X" / " | X" segments ONLY when the whole segment is
+       location / work-arrangement vocabulary ("Director, IT Security - Remote").
+       "Senior Security Engineer - Detection" and "... - Cloud" stay distinct.
+    3. Lowercase, replace punctuation with spaces, collapse whitespace.
+    """
+    text = _LOC_ARRANGEMENT_PARENS.sub("", (title or "").strip())
+    parts = _TITLE_SEP.split(text)
+    while len(parts) > 1 and _LOC_SEGMENT.match(parts[-1].strip()):
+        parts.pop()
+    text = " ".join(parts).lower()
+    text = _NON_ALNUM.sub(" ", text)
+    return _EXTRA_WS.sub(" ", text).strip()
+
+
+def _key(job: Job) -> tuple[str, str]:
+    return (normalize_company(job.company or ""), normalize_title(job.title or ""))
 
 
 def deduplicate_cross_source(jobs: list[Job]) -> list[Job]:
-    """Remove cross-source duplicates, preferring ATS over board sources.
+    """Remove duplicates, preferring direct ATS postings over board listings.
 
-    Two jobs are considered duplicates if their normalized company name AND
-    normalized title are identical.
+    * A board job is dropped when a non-board (ATS) job has the same normalized
+      company AND title: the ATS copy has the richer description and the direct
+      apply link.
+    * A job whose `id` already appeared is dropped (the same board posting
+      comes back from the main search and from each `local_searches` pass).
+    * Distinct jobs from the SAME source are all kept even when their titles
+      match: "Security Engineer" in London and "Security Engineer" in Remote-US
+      are different postings, and dropping the second could drop the only one
+      that passes the location filter. `main` later collapses matched variants.
 
-    Returns:
-        Deduplicated list of jobs. When a duplicate pair is found, the ATS
-        version is kept and the board version is dropped.
+    Input order is preserved.
     """
-    # Index: (normalized_company, normalized_title) -> Job
-    seen: dict[tuple[str, str], Job] = {}
+    ats_keys = {_key(j) for j in jobs if j.source != "board"}
+    seen_ids: set[str] = set()
+    result: list[Job] = []
     dupes_removed = 0
 
     for job in jobs:
-        key = (normalize_company(job.company), normalize_title(job.title))
-
-        if key not in seen:
-            seen[key] = job
-        else:
-            existing = seen[key]
-            # Prefer ATS over board
-            if existing.source == "ats" and job.source == "board":
-                # Keep existing ATS version, drop board duplicate
-                dupes_removed += 1
-                logger.debug("Dedup: dropping board duplicate '%s' at '%s' (ATS version kept)",
-                             job.title, job.company)
-            elif existing.source == "board" and job.source == "ats":
-                # Replace board version with ATS version
-                seen[key] = job
-                dupes_removed += 1
-                logger.debug("Dedup: replacing board version with ATS for '%s' at '%s'",
-                             job.title, job.company)
-            else:
-                # Same source - keep the first one (already deduped by ID within source)
-                pass
+        if job.id in seen_ids:
+            dupes_removed += 1
+            continue
+        if job.source == "board" and _key(job) in ats_keys:
+            dupes_removed += 1
+            logger.debug("Dedup: dropping board duplicate '%s' at '%s' (ATS version kept)",
+                         job.title, job.company)
+            continue
+        seen_ids.add(job.id)
+        result.append(job)
 
     if dupes_removed:
         logger.info("Cross-source dedup removed %d duplicate(s)", dupes_removed)
 
-    return list(seen.values())
+    return result

@@ -16,6 +16,18 @@ from .base import Scraper, Job, strip_html, parse_iso
 logger = logging.getLogger(__name__)
 
 
+def _description_from_job_ad(job_ad: dict) -> str:
+    """Plain text of the job description and qualifications sections."""
+    sections = (job_ad or {}).get("sections") or {}
+    parts = []
+    for key in ("jobDescription", "qualifications"):
+        section = sections.get(key)
+        text = section.get("text") if isinstance(section, dict) else ""
+        if text:
+            parts.append(strip_html(text))
+    return " ".join(parts)
+
+
 class SmartRecruitersScraper(Scraper):
     ats_name = "smartrecruiters"
     BASE_URL = "https://api.smartrecruiters.com/v1/companies/{slug}/postings"
@@ -82,7 +94,16 @@ class SmartRecruitersScraper(Scraper):
 
             apply_url = f"https://jobs.smartrecruiters.com/{company_slug}/{job_id}"
             posted_at = parse_iso(j.get("releasedDate") or j.get("createdOn"))
-            description = strip_html(j.get("jobAd", {}).get("sections", {}).get("jobDescription", {}).get("text", "")) if isinstance(j.get("jobAd"), dict) else ""
+            # The documented list endpoint returns summaries WITHOUT `jobAd`, so
+            # the description is normally empty here. Flag the job so main can
+            # fetch the detail page, but only if it passes the title/location
+            # filters (one extra request per such job, not per posting).
+            raw = j
+            description = ""
+            if isinstance(j.get("jobAd"), dict):
+                description = _description_from_job_ad(j["jobAd"])
+            else:
+                raw = {**j, "description_pending": True}
 
             remote: Optional[bool] = location_obj.get("remote") if isinstance(location_obj.get("remote"), bool) else None
             if remote is None and "remote" in location.lower():
@@ -99,6 +120,36 @@ class SmartRecruitersScraper(Scraper):
                 url=apply_url,
                 posted_at=posted_at,
                 description_text=description,
-                raw=j,
+                raw=raw,
             ))
         return jobs
+
+    def enrich_job(self, job: Job) -> bool:
+        """Fetch the posting detail (`/postings/{id}`) and fill in the description.
+
+        Returns True when a non-empty description was found. Network and parse
+        failures are logged and return False (the job just keeps no description).
+        """
+        parts = job.id.split(":", 2)
+        if len(parts) != 3 or not parts[2]:
+            return False
+        url = f"{self.BASE_URL.format(slug=job.company_slug)}/{parts[2]}"
+        try:
+            resp = self._throttled_get(url, timeout=self.timeout)
+        except requests.RequestException as e:
+            logger.warning("%s: SmartRecruiters detail request failed: %s", job.company, e)
+            return False
+        if not resp.ok:
+            logger.warning("%s: SmartRecruiters detail returned %s for %s", job.company, resp.status_code, parts[2])
+            return False
+        try:
+            detail = resp.json()
+        except ValueError:
+            logger.warning("%s: SmartRecruiters detail returned non-JSON", job.company)
+            return False
+        description = _description_from_job_ad(detail.get("jobAd") if isinstance(detail, dict) else None)
+        if not description:
+            return False
+        job.description_text = description
+        job.raw = {**(job.raw or {}), "description_pending": False}
+        return True

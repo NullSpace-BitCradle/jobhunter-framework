@@ -44,7 +44,15 @@ class GreenhouseScraper(Scraper):
             title = (j.get("title") or "").strip()
             location = ((j.get("location") or {}).get("name") or "").strip()
             url_apply = j.get("absolute_url", "")
-            posted_at = parse_iso(j.get("updated_at") or j.get("first_published_at") or j.get("created_at"))
+            # Prefer the FIRST publish date: updated_at moves whenever a recruiter
+            # edits the posting, which would hand an old role the freshness bonus.
+            # The documented list response only carries updated_at, so this is a
+            # fallback there; first_published (job detail) / first_published_at
+            # win whenever the API returns them.
+            posted_at = parse_iso(
+                j.get("first_published_at") or j.get("first_published")
+                or j.get("created_at") or j.get("updated_at")
+            )
             description = strip_html(j.get("content", ""))
 
             remote: Optional[bool] = None

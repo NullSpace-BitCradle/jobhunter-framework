@@ -49,7 +49,7 @@ def _resolve_paths() -> tuple[Path, Path, Path]:
             yaml = None
         if yaml is not None:
             try:
-                cfg = yaml.safe_load(config_path.read_text()) or {}
+                cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
             except Exception as e:  # pragma: no cover - malformed config
                 print(f"WARN: could not parse {config_path}: {e}", file=sys.stderr)
 
@@ -340,7 +340,7 @@ def main() -> int:
         print(f"Tracker not found at {APP_FILE}", file=sys.stderr)
         return 2
 
-    text = APP_FILE.read_text()
+    text = APP_FILE.read_text(encoding="utf-8")
     lines = text.splitlines()
     rows = parse_rows(lines)
     print(f"Parsed {len(rows)} rows from tracker")
@@ -415,8 +415,8 @@ def main() -> int:
 
     # Write new tracker
     backup = APP_FILE.with_suffix(".md.bak")
-    backup.write_text(text)
-    APP_FILE.write_text(new_text)
+    backup.write_text(text, encoding="utf-8")
+    APP_FILE.write_text(new_text, encoding="utf-8")
     print(f"Wrote {APP_FILE} (backup at {backup})")
 
     # Delete files

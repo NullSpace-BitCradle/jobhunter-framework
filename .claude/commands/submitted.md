@@ -5,7 +5,7 @@ argument-hint: <company> [role hint]
 
 # /submitted - Mark a queued application as actually submitted
 
-`/apply` generates the resume + cover letter and stacks the row under `## Queued`. This command flips its status to `applied`, moves the row from `## Queued` to `## In Process`, and relocates the resume and cover letter PDFs (and `.tex`) into the `applied/` subdirectory. Use it when no ack email is expected (some portals don't send one) or when the ack will take days and the user wants the tracker accurate now.
+`/apply` generates the resume + cover letter and stacks the row under `## Queued`. This command flips its status to `applied`, moves the row from `## Queued` to `## In Process`, and relocates the resume and cover letter PDFs (with their `.tex` and `.txt`) into the `applied/` subdirectory. Use it when no ack email is expected (some portals don't send one) or when the ack will take days and the user wants the tracker accurate now.
 
 User input: `$ARGUMENTS`
 
@@ -43,7 +43,7 @@ For the `[resume]` and `[cover]` PDFs:
 
 1. Resolve `~/` to the user's home and normalize.
 2. Compute the destination as `<output_dir>/applied/<filename>`. Create `<output_dir>/applied/` if it does not exist.
-3. Move the `.pdf`. Also move the matching `.tex` if one exists at the same basename (the LaTeX source should travel with the compiled PDF).
+3. Move the `.pdf`. Also move the matching `.tex` and `.txt` if they exist at the same basename (the LaTeX source and the plain-text export travel with the compiled PDF).
 4. If the source file is already under `applied/`, or the source does not exist (previously moved or manual cleanup), log it and continue - do not error.
 5. Never move across filesystems blindly; `mv` within the same volume is fine. If the destination already exists, leave the source alone and flag it in the report.
 

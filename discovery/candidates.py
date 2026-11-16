@@ -8,8 +8,6 @@ threshold and get surfaced in the digest as promotion candidates. When the
 JobSpy URL resolves to a known ATS, the slug is extracted automatically so the
 suggestion includes a copy-paste-ready companies.yaml entry.
 """
-import fcntl
-import json
 import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -17,6 +15,7 @@ from typing import Optional
 
 from scrapers.base import Job
 from dedup import normalize_company
+from fsutil import StateFileError, atomic_write_json, keep_backup, load_json_object
 # Re-export detect_ats_from_url for backward compat with any caller importing
 # it from candidates. url_utils is the single source of truth for ATS URL
 # pattern matching; both candidate tracking and jobspy canonicalization use it.
@@ -62,18 +61,21 @@ def _default_state() -> dict:
 
 
 def load_candidates(path: Path) -> dict:
-    """Load candidate state. Returns empty structure if missing or corrupt."""
-    if not path.exists():
-        return _default_state()
+    """Load candidate state. Returns an empty structure if the file is missing.
+
+    This file is a derived tally (not the seen-jobs dedup record), so an
+    unreadable or wrong-shaped file does not abort the scan: a copy is kept at
+    `<name>.corrupt`, a warning is logged, and tracking restarts from empty.
+    """
     try:
-        with path.open() as f:
-            fcntl.flock(f, fcntl.LOCK_SH)
-            data = json.load(f)
-            fcntl.flock(f, fcntl.LOCK_UN)
-    except (json.JSONDecodeError, ValueError, OSError) as e:
-        logger.warning("Corrupt candidate state %s: %s - starting fresh", path, e)
+        data = load_json_object(path)
+    except StateFileError as e:
+        logger.warning("Unreadable candidate state: %s - starting fresh (original kept as .corrupt)", e)
         return _default_state()
-    if not isinstance(data, dict) or "candidates" not in data:
+    if data is None:
+        return _default_state()
+    if not isinstance(data.get("candidates"), dict):
+        logger.warning("Candidate state %s has no usable 'candidates' object - starting fresh", path)
         return _default_state()
     return data
 
@@ -91,10 +93,8 @@ def save_candidates(state: dict, path: Path) -> None:
         if v.get("last_seen", "") >= cutoff
     }
 
-    with path.open("w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        json.dump(state, f, indent=2)
-        fcntl.flock(f, fcntl.LOCK_UN)
+    keep_backup(path)
+    atomic_write_json(path, state)
 
 
 def update_candidate(state: dict, job: Job, score: int, now_iso: str) -> None:

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from fsutil import StateFileError
 from main import load_state, save_state, write_digest, load_declined_urls
 from scrapers.base import Job
 
@@ -12,6 +13,11 @@ from scrapers.base import Job
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _recent_iso(days_ago: int = 1) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+
+
 
 def _job(**overrides) -> Job:
     """Build a Job with sensible defaults, overridden by kwargs."""
@@ -41,11 +47,15 @@ class TestLoadState:
         state = load_state(tmp_path / "nonexistent.json")
         assert state == {"seen_ids": {}, "last_run": None}
 
-    def test_corrupt_json_returns_empty(self, tmp_path):
+    def test_corrupt_json_is_refused_not_reset(self, tmp_path):
+        """Starting fresh on a corrupt file would mark every posting new and
+        flood the digest, so load_state refuses and keeps the evidence."""
         bad_file = tmp_path / "state.json"
         bad_file.write_text("{this is not valid json!!!")
-        state = load_state(bad_file)
-        assert state == {"seen_ids": {}, "last_run": None}
+        with pytest.raises(StateFileError):
+            load_state(bad_file)
+        assert bad_file.read_text() == "{this is not valid json!!!"   # untouched
+        assert (tmp_path / "state.json.corrupt").exists()              # copy kept
 
     def test_valid_roundtrip(self, tmp_path):
         state_file = tmp_path / "state.json"
@@ -66,7 +76,9 @@ class TestLoadState:
 class TestSaveState:
     def test_creates_parent_dirs(self, tmp_path):
         nested = tmp_path / "a" / "b" / "state.json"
-        state = {"seen_ids": {"id1": "2026-04-10T00:00:00+00:00"}}
+        # Relative to now: save_state prunes ids older than SEEN_ID_MAX_AGE_DAYS,
+        # so a fixed calendar date eventually "expires" and the test rots.
+        state = {"seen_ids": {"id1": _recent_iso()}}
         save_state(state, nested)
         assert nested.exists()
         data = json.loads(nested.read_text())
@@ -74,7 +86,7 @@ class TestSaveState:
 
     def test_writes_valid_json_with_last_run(self, tmp_path):
         state_file = tmp_path / "state.json"
-        state = {"seen_ids": {"x:y:1": "2026-04-10T00:00:00+00:00"}}
+        state = {"seen_ids": {"x:y:1": _recent_iso()}}
         save_state(state, state_file)
         data = json.loads(state_file.read_text())
         assert "last_run" in data

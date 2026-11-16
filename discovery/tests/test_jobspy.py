@@ -191,3 +191,87 @@ class TestUrlCanonicalization:
         mock_scrape.return_value = _make_df([row_b])
         jobs_b = self.scraper.fetch_jobs_by_search({"sites": ["linkedin"]}, {})
         assert jobs_a[0].id == jobs_b[0].id
+
+
+# ---------------------------------------------------------------------------
+# Row shape of python-jobspy >= 1.2 (verified against 1.4.1's JobPost model):
+# a single `location` string column, `date_posted` as datetime.date, and
+# missing cells as NaN / None / pd.NA / pd.NaT.
+# ---------------------------------------------------------------------------
+
+import datetime as _dt
+
+
+def _fetch(rows):
+    scraper = JobspyScraper()
+    with patch("jobspy.scrape_jobs", return_value=_make_df(rows)):
+        return scraper.fetch_jobs_by_search({"sites": ["linkedin"]}, {})
+
+
+class TestRealJobspyRowShape:
+    def test_single_location_column_is_used(self):
+        jobs = _fetch([{
+            "site": "linkedin", "title": "Staff Security Engineer", "company": "Acme",
+            "job_url": "https://www.linkedin.com/jobs/view/1",
+            "location": "San Francisco, CA, USA", "is_remote": False,
+            "description": "x", "date_posted": _dt.date(2026, 4, 10),
+        }])
+        assert jobs[0].location == "San Francisco, CA, USA"
+
+    def test_location_column_wins_over_legacy_city_state_country(self):
+        jobs = _fetch([{
+            "site": "linkedin", "title": "T", "company": "C",
+            "job_url": "https://www.linkedin.com/jobs/view/2",
+            "location": "Remote, USA", "city": "Ignored", "state": "ZZ", "country": "Nowhere",
+        }])
+        assert jobs[0].location == "Remote, USA"
+
+    def test_date_posted_as_plain_date(self):
+        """JobSpy returns datetime.date, which is NOT a datetime: it used to give None."""
+        jobs = _fetch([{
+            "site": "linkedin", "title": "T", "company": "C",
+            "job_url": "https://www.linkedin.com/jobs/view/3",
+            "date_posted": _dt.date(2026, 4, 10),
+        }])
+        assert jobs[0].posted_at == datetime(2026, 4, 10, tzinfo=timezone.utc)
+
+    @pytest.mark.parametrize("missing", [float("nan"), None, pd.NA, pd.NaT])
+    def test_missing_values_never_become_the_string_nan(self, missing):
+        jobs = _fetch([{
+            "site": "linkedin", "title": "Real Title", "company": missing,
+            "job_url": "https://www.linkedin.com/jobs/view/4",
+            "job_url_direct": missing, "location": missing, "description": missing,
+            "company_url": missing, "company_url_direct": missing,
+            "date_posted": missing, "is_remote": missing,
+        }])
+        j = jobs[0]
+        assert j.company == ""
+        assert j.location == ""
+        assert j.description_text == ""
+        assert j.posted_at is None
+        assert j.remote is None
+        assert j.raw["job_url_direct"] == ""
+        assert j.raw["company_url"] == ""
+        assert j.raw["company_url_direct"] == ""
+        assert "nan" not in (j.company + j.location + j.description_text + j.url).lower().replace("linkedin", "")
+
+    def test_nan_in_dataframe_column_from_missing_keys(self):
+        """A column that is only present in some rows becomes NaN in the others."""
+        jobs = _fetch([
+            {"site": "linkedin", "title": "A", "company": "Acme",
+             "job_url": "https://www.linkedin.com/jobs/view/5", "description": "d",
+             "date_posted": _dt.date(2026, 4, 1)},
+            {"site": "linkedin", "title": "B", "company": "Beta",
+             "job_url": "https://www.linkedin.com/jobs/view/6"},
+        ])
+        b = [j for j in jobs if j.title == "B"][0]
+        assert b.description_text == ""
+        assert b.posted_at is None
+
+    def test_pandas_timestamp_date(self):
+        jobs = _fetch([{
+            "site": "linkedin", "title": "T", "company": "C",
+            "job_url": "https://www.linkedin.com/jobs/view/7",
+            "date_posted": pd.Timestamp("2026-04-10"),
+        }])
+        assert jobs[0].posted_at == datetime(2026, 4, 10, tzinfo=timezone.utc)

@@ -1,11 +1,11 @@
 ---
 description: Surface matched jobs from past digests that were never logged to the tracker
-argument-hint: [--days N] [--limit N] [--min-score N] [--max-score N]
+argument-hint: "[--days N] [--limit N] [--min-score N] [--max-score N]"
 ---
 
 # /backfill - Resurface missed opportunities from past digests
 
-Walks back over recent `digest-YYYY-MM-DD.md` files, extracts every matched job, cross-references against the applications tracker, and surfaces anything that was NEVER acted on. Useful two ways:
+Walks back over recent `digest-YYYY-MM-DD-HHMMSS.md` files (and the older `digest-YYYY-MM-DD.md` form; `dryrun-*` previews are ignored), extracts every matched job, cross-references against the applications tracker, and surfaces anything that was NEVER acted on. Useful two ways:
 
 - **Cast a wider net.** New postings light this week? Run `/backfill` to see what slipped through in the last month.
 - **Fill gaps by score band.** Pair with `--max-score N` to focus on lower-scored matches you reasonably skipped at the time but would apply to now if you had the capacity.
@@ -39,7 +39,7 @@ If `config.yaml` is missing, fall back to `discovery/output/` and `applications.
 Execute from the discovery venv:
 
 ```bash
-cd "$(git rev-parse --show-toplevel)/discovery" && source venv/bin/activate && python main.py --backfill $ARGUMENTS
+cd "$(git rev-parse --show-toplevel)/discovery" && { PY=venv/bin/python; [ -x "$PY" ] || PY=venv/Scripts/python.exe; "$PY" main.py --backfill $ARGUMENTS; }
 ```
 
 The script writes a timestamped `backfill-YYYY-MM-DD-HHMMSS.md` to `<discovery.digest_dir>` and prints a summary line like:

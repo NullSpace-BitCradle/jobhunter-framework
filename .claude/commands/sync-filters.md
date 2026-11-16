@@ -28,10 +28,10 @@ Example `--check` output:
 ```
 Drift check against ~/JobHunt/Master_Career_Document.md
   New patterns needed (2):
-    - cleared_contractor_hard_required (from "Active clearance required" anti-target)
-    - mdr_mssp_staff (from "MSSP/MDR staff analyst" anti-target)
+    - license_hard_required (from "Roles that require a license I don't hold" anti-target)
+    - on_site_outside_area (from "On-site roles outside my commute area" anti-target)
   Orphaned patterns (1):
-    - director_plus_security_mgmt (no corresponding MCD anti-target)
+    - director_plus_mgmt (no corresponding MCD anti-target)
   Patterns with proposed updates (1):
     - cert_hard_required (2 new description_contains_any entries proposed)
 
@@ -51,7 +51,7 @@ If config is absent, default to `Master_Career_Document.md` in the project root 
 
 ## Step 2 - Read the MCD Anti-Target Lanes
 
-Read the MCD. Find the "Anti-Target Lanes" subsection (typically under "Notes for Resume Customization"). Extract every anti-target lane entry. Each entry describes a category of role the user should NOT apply to, with a brief explanation of why.
+Read the MCD. Find the "Anti-Target Lanes" subsection (typically under "Notes for Resume Customization"; format in `docs/mcd-conventions.md`). Extract every anti-target lane entry: one `> - ` line each inside the subsection's agent-note block, or one plain `- ` bullet each in an MCD that predates that convention. Each entry describes a category of role the user should NOT apply to, with a brief explanation of why.
 
 ## Step 3 - Read the current filters.yaml (if present)
 
@@ -61,11 +61,11 @@ Read `<discovery.config_dir>/filters.yaml`. Note any existing patterns - the use
 
 For each anti-target lane in the MCD, generate a YAML filter block under `anti_target_patterns:` with:
 
-- **Key:** a snake_case slug derived from the lane name (e.g., "Hands-on Application Security Engineer" → `hands_on_appsec`)
+- **Key:** a snake_case slug derived from the lane name (e.g., "ICU or emergency department staff nurse roles" → `icu_ed_staff_nurse`)
 - **`description:`** a short human-readable label ending with "(MCD anti-target)"
 - **Match conditions** - use the condition types from the filter schema:
- - `title_contains_any:` - lowercase substrings to match in job titles
- - `description_contains_any:` - lowercase substrings to match in JD body text
+ - `title_contains_any:` - whole words or phrases to match in job titles
+ - `description_contains_any:` - whole words or phrases to match in JD body text
  - `description_contains_all:` - ALL must match (for tighter patterns)
  - `location_contains_any:` - match in location field
  - `negates_if_location_also_contains:` - cancel the match if location also has these terms (e.g., "remote" negates "on-site")
@@ -75,7 +75,7 @@ When generating match strings:
 - Use common ATS phrasing you'd expect to see in real job descriptions
 - Be conservative - false negatives (missing a bad match) are acceptable; false positives (filtering a good match) are not
 - For certification/degree requirements, match on "required" language only - not "preferred" or "nice to have"
-- Keep strings lowercase (the matching engine lowercases inputs)
+- Matching is case-insensitive (the scanner lowercases both the posting text and every string in `filters.yaml`) and whole-word: `waf` matches "WAF" but not "waffle", and `intern` matches "Intern" but not "Internal". Plurals and stems are not implied, so list each form you want ("intern" and "interns"). Writing the strings in lowercase is still the convention
 
 **If a current filters.yaml pattern corresponds to an MCD anti-target, preserve the user's existing match strings** - they may have been tuned from real-world scan results. Only add new strings, don't remove hand-tuned ones.
 

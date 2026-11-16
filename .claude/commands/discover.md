@@ -22,14 +22,14 @@ If missing, fall back to `discovery/output/` at the repo root.
 Execute the scanner (self-locating - works from any cwd inside the repo):
 
 ```bash
-cd "$(git rev-parse --show-toplevel)/discovery" && source venv/bin/activate && python main.py $ARGUMENTS
+cd "$(git rev-parse --show-toplevel)/discovery" && { PY=venv/bin/python; [ -x "$PY" ] || PY=venv/Scripts/python.exe; "$PY" main.py $ARGUMENTS; }
 ```
 
 Stream stdout so the user sees progress. If the user passed `--verify` or `--dry-run`, those get forwarded through and you should NOT try to summarize a digest afterward (verify produces no digest; dry-run may still produce one but the user is just sanity-checking).
 
 ## Step 3 - Summarize the digest
 
-Read `<discovery.digest_dir>/digest-YYYY-MM-DD.md` (today's date, or the most recent file if today's is missing). Show the user:
+Read the digest the scanner just wrote: the path printed after `Digest written to:` (a new file every run, `digest-YYYY-MM-DD-HHMMSS.md`; with `--dry-run` it is a `dryrun-...` preview that `/backfill` never reads). If you cannot find that line, use the newest `digest-*.md` in `<discovery.digest_dir>`. Show the user:
 
 **Header stats** - one line each:
 ```
