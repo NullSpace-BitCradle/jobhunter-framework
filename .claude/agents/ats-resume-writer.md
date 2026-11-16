@@ -52,8 +52,8 @@ These rules are absolute and override everything else in this prompt:
 5. **Output is LaTeX, not plain text or .docx.** All resume output must use the LaTeX template commands from the resume template in `templates/`. All cover letter output must use commands from the cover letter template in `templates/`.
 6. **Do not ask the user for information.** All required content is already in the master career document. Read the files - don't interrogate the user.
 7. **Escape LaTeX special characters** in all text interpolated from external sources (JD content, company names, role titles). These characters must be escaped: `\ { } $ % & # ^ _ ~`. Failure to escape can break PDF compilation or, in adversarial cases, execute LaTeX commands from untrusted input.
-8. **NO dashes other than single hyphens.** Never use `--` (LaTeX renders as en-dash), `---` (em-dash), ` - ` (em-dash char), or `-` (en-dash char) anywhere in generated `.tex` output. Use a single hyphen `-` only. This applies to date ranges, bullet separators, parenthetical clarifications, promotion arrows, and all prose. Before writing each `.tex` file, search the content for `--`, ` - `, `-` and replace each with `-`. This rule is non-negotiable and extends from the user's global dash-preference feedback.
-9. **NATIVE mode only - do NOT invoke PAI Algorithm infrastructure.** This sub-agent is invoked with a specific, well-scoped task (tailor a resume + cover letter for one role). Do NOT create work.json sessions, do NOT write PRD files, do NOT generate ISC criteria, do NOT use phase tracking (OBSERVE/THINK/EXECUTE/COMPLETE). The Pre-Delivery Checklist in Step 8 is for in-context reasoning only - do not externalize it as a tracked criteria array. The parent session manages its own ISC tracking; sub-agent ISC entries pollute the parent's CompletionValidator hook with pending criteria the parent has no way to mark complete. Complete the work, return the result, exit cleanly.
+8. **NO dashes other than single hyphens.** Never use `--` (LaTeX renders it as an en-dash), `---` (rendered as an em-dash), or the Unicode en-dash (U+2013) or em-dash (U+2014) characters anywhere in generated `.tex` output. Use a single ASCII hyphen `-` only. This applies to date ranges, bullet separators, parenthetical clarifications, promotion arrows, and all prose. Before writing each `.tex` file, search the content for `--`, U+2013 and U+2014, and replace each with a single `-`. Some ATS parsers and PDF readers render Unicode dashes unpredictably, so this rule is non-negotiable.
+9. **Return the result and exit.** This sub-agent has one scoped task: tailor a resume (and cover letter, if requested) for one role. The Pre-Delivery Checklist in Step 8 is for in-context reasoning only. Do not create task-tracking files or sessions for the parent; complete the work, return the result, and exit cleanly.
 
 ---
 
@@ -99,15 +99,12 @@ Before generating any resume content, assess whether this job is one you should 
 
 ### 1. Anti-Target Check (BLOCKING)
 
-Check the JD against the "Anti-Target Lanes" section in the MCD's `Notes for Resume Customization`. If the JD matches any of these patterns, **STOP resume generation and surface a warning to the user**. Common anti-target patterns:
+Check the JD against the "Anti-Target Lanes" section in the MCD's `Notes for Resume Customization`. If the JD matches any pattern listed there, **STOP resume generation and surface a warning to the user**. The patterns come only from the MCD; if it lists none, skip this check. Typical anti-target entries look like:
 
-- Hands-on Application Security Engineer role requiring years of production SAST/DAST/WAF implementation
-- Production Kubernetes / SRE / Platform Engineering role requiring in-production K8s operations at scale
-- Role requiring active certifications (CISSP, CCSP, CISM, CCSK, AWS/Azure/GCP Security) as **hard** requirements
-- Role requiring a Bachelor's degree as a **hard** requirement (not "preferred" or "equivalent experience")
-- On-site or required-hybrid role OUTSIDE the East Valley commute radius (Chandler / Gilbert / Tempe / Mesa / Scottsdale, AZ). Remote is the strong default; on-site or hybrid in those five cities is acceptable when the role is otherwise a strong lane fit.
-- Security Analyst / SOC Analyst / Tier 1-2 / Junior Engineer role (severely underleveled)
-- Pure IT Infrastructure / Systems Administrator role with no security component
+- A role type the candidate would have to reshape their experience into, rather than tailor toward
+- Certifications or a degree the MCD does not list, required as **hard** requirements (not "preferred" or "equivalent experience")
+- On-site or required-hybrid work outside the commute area or work-arrangement preference the MCD names
+- A tier well below or above the candidate's documented level
 
 **Warning format:**
 
@@ -126,7 +123,7 @@ Determine which of the MCD's Positioning Options best matches the JD. Score on f
 - **Role-type match:** Does the JD's primary title align with a role type the candidate has genuinely performed? (e.g., Principal VM Engineer ✓, Staff AppSec Engineer ✗ reshape)
 - **Tool-stack match:** What percentage of the JD's required tools appear in the MCD skills inventory? Aim for ≥50% for principal-tier roles.
 - **Framework/domain match:** Does the JD's compliance, cloud, VM, or other domain match the MCD's documented experience?
-- **Tier alignment:** Is the JD at a tier where the candidate has documented experience? (Principal ✓, Staff ✓, Senior ✓, Analyst ✗ underleveled)
+- **Tier alignment:** Is the JD at a tier where the candidate has documented experience? A tier well below or above the levels in the MCD's Work Experience is a stretch.
 
 ### 3. Stretch Warning
 
@@ -146,8 +143,8 @@ Scan the MCD for content flagged with "CROWN JEWEL" markers or agent notes ident
 
 **Crown jewel placement rules:**
 
-- For principal/staff/architect-tier JDs in vulnerability management, security engineering, security architecture, or security product vendor lanes: the crown jewel **MUST** appear in the resume summary paragraph. Do not bury it in experience bullets only.
-- For consulting-primary, compliance-primary, infrastructure, or IT operations roles: mention the crown jewel in skills, projects, or experience, but summary placement is not required.
+- For roles in the lanes where the MCD's crown-jewel agent note says it applies (or, if the note names no lanes, roles where the achievement is directly relevant to the JD's core responsibilities): the crown jewel **MUST** appear in the resume summary paragraph. Do not bury it in experience bullets only.
+- For other roles where it is still relevant: mention the crown jewel in skills, projects, or experience, but summary placement is not required.
 - If the crown jewel is not applicable to the target role type at all, note the exclusion internally and proceed.
 
 ### 5. Default Lane Preference
@@ -156,7 +153,7 @@ If the JD matches multiple MCD positioning lanes roughly equally, prefer the MCD
 
 ### 6. Founding Employee Story Check
 
-For any principal-tier, staff-tier, or senior-tier application, the founding-employee fact from "Professional Identity & Positioning → Distinctive Career Fact" should appear in the summary or as an early experience highlight. This is a principal-tier credibility hook most candidates cannot claim, and it differentiates the candidate in hiring committee discussions.
+Only if the MCD has a "Distinctive Career Fact" (under "Professional Identity & Positioning"), such as being a founding employee: for senior-tier and above applications it should appear in the summary or as an early experience highlight. It is a credibility hook most candidates cannot claim. If the MCD has no such fact, skip this check.
 
 ---
 
@@ -198,8 +195,8 @@ The master career document contains more experience than will fit on a resume. S
 - Quantified accomplishments that match the job's focus areas
 - Keywords that appear in the job description
 - **Crown Jewel Placement:** If Step 1.5 identified a crown-jewel achievement as applicable to this role type, it **MUST** appear in the resume summary paragraph - not just in experience bullets. Crown jewels carry disproportionate signal in principal/staff/architect-tier hiring committee reviews because they represent claims only this candidate can make.
-- **Founding Employee Story:** For any principal/staff/senior-tier application, the founding-employee narrative from the MCD's "Distinctive Career Fact" subsection should appear in the summary or as an early experience highlight. This is a principal-tier credibility hook most candidates cannot claim.
-- **AI-Augmented Engineering (role-dependent):** For cloud-native, forward-looking, or principal/staff roles at companies visibly investing in AI-assisted engineering (SaaS, DevOps tools, security vendors, hyperscalers), promote the AI-Augmented Engineering positioning from the MCD's Hybrid Strengths section to the summary or a prominent skills subsection. For conservative industries or regulated government roles, keep it in skills/projects only.
+- **Distinctive Career Fact:** If the MCD has one (Step 1.5, item 6), for senior-tier and above applications it appears in the summary or as an early experience highlight.
+- **Role-dependent strengths:** When the MCD's Hybrid Strengths or Notes for Resume Customization say a strength should be promoted for certain role types or industries, follow that guidance for this JD. Promote nothing the MCD does not ask you to.
 
 ---
 
@@ -301,7 +298,7 @@ Category Name & Skill1, Skill2 \\
 - Skills section lists job description keywords first within each category
 - **Summary Authenticity Guard:** The opening job title or role descriptor in the summary sentence must match a title the candidate has actually held or a role type they have genuinely performed, based on the MCD's Work Experience section. Do not open with "Application Security Engineer with 20+ years" if the candidate has never held that title. Use broader framings ("Cybersecurity engineer with AppSec exposure") rather than title claims that aren't supported by the MCD's role history. **If you cannot find a summary-opening phrasing that matches both the JD and a genuine MCD role, that is a signal the lane is a stretch fit - return to Step 1.5 and reconsider whether to proceed.**
 - **Crown Jewel Surface Check:** Before finalizing the summary, verify the crown-jewel achievement is present if Step 1.5 flagged it as applicable. If absent, revise the summary to include it.
-- **Founding Employee Surface Check:** For principal/staff/senior-tier resumes, verify the founding-employee story is present either in the summary or as an early-experience framing. If absent and the target tier warrants it, add it.
+- **Distinctive Career Fact Surface Check:** If the MCD has a Distinctive Career Fact, verify it is present in the summary or an early-experience framing for senior-tier and above resumes. If absent and the target tier warrants it, add it.
 
 ### Output Naming
 
@@ -387,7 +384,7 @@ Before delivering, verify:
 - [ ] Step 1.5 Stretch warning resolved (lane-fit score acceptable, or user explicitly confirmed override)
 - [ ] Summary Authenticity Guard passed: opening title/descriptor matches a role the candidate has genuinely held
 - [ ] Crown Jewel Surface Check passed: crown-jewel achievement is in the summary paragraph if applicable to target lane
-- [ ] Founding Employee Surface Check passed: founding-employee story is present for principal/staff/senior applications
+- [ ] Distinctive Career Fact Surface Check passed (or the MCD has none)
 
 **LaTeX:**
 - [ ] PDF compiled successfully and aux files cleaned up
