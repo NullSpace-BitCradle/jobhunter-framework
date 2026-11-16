@@ -10,17 +10,14 @@ Usage:
     python main.py -v                 # Verbose logging
 """
 import argparse
-import fcntl
+import functools
 import hashlib
 import json
 import logging
 import re
 import sys
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, timezone, timedelta, tzinfo
 from pathlib import Path
-from zoneinfo import ZoneInfo
-
-LOCAL_TZ = ZoneInfo("America/Phoenix")
 
 import yaml
 
@@ -31,13 +28,48 @@ from scrapers.ashby import AshbyScraper
 from scrapers.smartrecruiters import SmartRecruitersScraper
 from scrapers.workable import WorkableScraper
 from scrapers.jobspy import JobspyScraper
-from dedup import deduplicate_cross_source, normalize_company
+from dedup import deduplicate_cross_source, normalize_company, normalize_title
 from url_utils import normalize_url
+from fsutil import (
+    StateFileError, atomic_write_json, keep_backup, load_json_object, write_new_text,
+)
 import candidates as candidates_mod
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent      # discovery/
 REPO_ROOT = PROJECT_ROOT.parent                      # jobhunter-framework/
+
+# Timezone used for digest filenames and dates. None means "the system local
+# timezone" (datetime.now().astimezone()), which works the same on Linux,
+# macOS and Windows. Set `discovery.timezone: America/Phoenix` (any IANA name)
+# in config.yaml to override; see configure_timezone().
+LOCAL_TZ: tzinfo | None = None
+
+
+def local_now() -> datetime:
+    """Current time in the configured timezone, else the system local timezone."""
+    if LOCAL_TZ is not None:
+        return datetime.now(LOCAL_TZ)
+    return datetime.now().astimezone()
+
+
+def configure_timezone(framework_config: dict) -> None:
+    """Apply `discovery.timezone` from the framework config (IANA name).
+
+    ZoneInfo is imported lazily: on Windows it needs the `tzdata` package
+    (listed in requirements.txt). Any failure falls back to the system timezone
+    rather than aborting a scan.
+    """
+    global LOCAL_TZ
+    LOCAL_TZ = None
+    name = ((framework_config or {}).get("discovery") or {}).get("timezone")
+    if not name:
+        return
+    try:
+        from zoneinfo import ZoneInfo
+        LOCAL_TZ = ZoneInfo(str(name))
+    except Exception as e:  # ZoneInfoNotFoundError, ImportError, ValueError
+        logging.warning("Ignoring discovery.timezone %r (%s); using the system timezone", name, e)
 
 SCRAPER_REGISTRY = {
     "greenhouse": GreenhouseScraper(),
@@ -49,7 +81,7 @@ SCRAPER_REGISTRY = {
 
 
 def load_yaml(path: Path) -> dict:
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -59,7 +91,7 @@ def load_framework_config(explicit_path: Path | None = None) -> dict:
     if not path.exists():
         return {}
     try:
-        return yaml.safe_load(path.read_text()) or {}
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception as e:
         logging.warning("Failed to read %s: %s", path, e)
         return {}
@@ -99,6 +131,11 @@ REPEAT_DECLINE_THRESHOLD = 3
 # JD body text is persisted. /apply reads from this cache before falling back
 # to WebFetch, avoiding LinkedIn 403s on URLs the scanner has already pulled.
 BOARD_DESCRIPTIONS_FILENAME = "board-descriptions.json"
+
+# Real-run digest filenames: `digest-YYYY-MM-DD-HHMMSS.md` (plus `_N` if two runs
+# land in the same second). The legacy `digest-YYYY-MM-DD.md` form still parses.
+# Dry runs write `dryrun-*.md` and are deliberately NOT matched here.
+DIGEST_NAME_RE = re.compile(r"^digest-(\d{4}-\d{2}-\d{2})(?:-\d{6}(?:_\d+)?)?\.md$")
 
 # Matches a tracker row where the first cell is an ISO date (YYYY-MM-DD). Robust
 # against year boundaries and accidental text that happens to start with "| 20".
@@ -156,7 +193,7 @@ def load_tracker_urls(
         return set()
     urls: set[str] = set()
     try:
-        lines = applications_file.read_text().splitlines()
+        lines = applications_file.read_text(encoding="utf-8").splitlines()
         header = _parse_tracker_header(lines)
         if not header:
             logging.warning("Applications tracker %s: no header row found", applications_file)
@@ -215,7 +252,7 @@ def load_tracker_identity_keys(
     urls: set[str] = set()
     pairs: set[tuple[str, str]] = set()
     try:
-        lines = applications_file.read_text().splitlines()
+        lines = applications_file.read_text(encoding="utf-8").splitlines()
         header = _parse_tracker_header(lines)
         if not header:
             return set(), set()
@@ -277,7 +314,7 @@ def load_repeat_decline_pairs(
         return set()
     counts: dict[tuple[str, str], int] = {}
     try:
-        lines = applications_file.read_text().splitlines()
+        lines = applications_file.read_text(encoding="utf-8").splitlines()
         header = _parse_tracker_header(lines)
         if not header:
             return set()
@@ -317,23 +354,17 @@ def persist_board_descriptions(board_jobs: list[Job], path: Path) -> None:
 
     Stores `{normalized_url: {company, title, location, description, posted_at,
     saved_at}}`. Prunes entries older than SEEN_ID_MAX_AGE_DAYS to bound size.
-    Atomic via fcntl flock to match save_state's locking discipline.
+    Written atomically (temp file + os.replace). This is a cache, so an
+    unreadable file is set aside (`.corrupt` copy) and rebuilt rather than
+    aborting the scan.
     """
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(days=SEEN_ID_MAX_AGE_DAYS)).isoformat()
 
-    existing: dict = {}
-    if path.exists():
-        try:
-            with path.open() as f:
-                fcntl.flock(f, fcntl.LOCK_SH)
-                existing = json.load(f)
-                fcntl.flock(f, fcntl.LOCK_UN)
-        except (json.JSONDecodeError, OSError, ValueError) as e:
-            logging.warning("Corrupt board-descriptions cache at %s: %s - starting fresh", path, e)
-            existing = {}
-
-    if not isinstance(existing, dict):
+    try:
+        existing = load_json_object(path) or {}
+    except StateFileError as e:
+        logging.warning("Unreadable board-descriptions cache: %s - rebuilding it", e)
         existing = {}
 
     # Prune stale entries before adding new ones.
@@ -358,24 +389,35 @@ def persist_board_descriptions(board_jobs: list[Job], path: Path) -> None:
             "saved_at": now_iso,
         }
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        json.dump(existing, f, indent=2)
-        fcntl.flock(f, fcntl.LOCK_UN)
+    atomic_write_json(path, existing)
 
 
 def load_state(state_file: Path) -> dict:
-    if state_file.exists():
-        try:
-            with state_file.open() as f:
-                fcntl.flock(f, fcntl.LOCK_SH)
-                data = json.load(f)
-                fcntl.flock(f, fcntl.LOCK_UN)
-                return data
-        except (json.JSONDecodeError, ValueError) as e:
-            logging.warning("Corrupt state file %s: %s - starting fresh", state_file, e)
-    return {"seen_ids": {}, "last_run": None}
+    """Load seen-jobs state. A missing file is a legitimate first run.
+
+    An existing but unreadable / corrupt / wrong-shaped file raises
+    StateFileError instead of silently starting fresh: starting fresh would
+    mark every posting new again and flood the digest. A copy of the bad file
+    is kept next to it (`.corrupt`); main() turns the error into a clear
+    message and a non-zero exit.
+    """
+    data = load_json_object(state_file)
+    if data is None:
+        return {"seen_ids": {}, "last_run": None}
+    seen = data.get("seen_ids", {})
+    if not isinstance(seen, (dict, list)):
+        raise StateFileError(f"{state_file} has an invalid 'seen_ids' (expected an object or list)")
+    return data
+
+
+def refresh_seen_ids(seen: dict, fetched_ids, now_iso: str) -> dict:
+    """Stamp EVERY id fetched this run with `now_iso` (new ones are added,
+    known ones are refreshed). Without the refresh a posting that stays open
+    keeps its first-seen timestamp, ages past SEEN_ID_MAX_AGE_DAYS, gets pruned,
+    and reappears as "new"."""
+    for job_id in fetched_ids:
+        seen[job_id] = now_iso
+    return seen
 
 
 def save_state(state: dict, state_file: Path) -> None:
@@ -395,30 +437,83 @@ def save_state(state: dict, state_file: Path) -> None:
             fresh = dict(sorted_items[:SEEN_ID_MAX_COUNT])
         state["seen_ids"] = fresh
 
-    with state_file.open("w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        json.dump(state, f, indent=2)
-        fcntl.flock(f, fcntl.LOCK_UN)
+    # Keep the previous good state as seen-jobs.json.bak, then replace the
+    # file atomically so a crash mid-write can never leave a truncated state.
+    keep_backup(state_file)
+    atomic_write_json(state_file, state)
+
+
+@functools.lru_cache(maxsize=1024)
+def _term_regex(terms: tuple[str, ...], whole_word: bool):
+    """Compile configured keywords into ONE case-insensitive matcher.
+
+    Keywords are lowercased here (config values are not guaranteed lowercase;
+    score_job already lowercases both sides, matching now does too). With
+    `whole_word`, a keyword matches only as a whole word or phrase: the
+    lookarounds `(?<!\\w)...(?!\\w)` are used instead of `\\b` so keywords that
+    start or end in punctuation ("c++", "ts/sci") still work. Blank keywords
+    are dropped (an empty string would match every title). Returns None when
+    no usable keyword remains.
+    """
+    cleaned = sorted({t.strip().lower() for t in terms if t.strip()}, key=len, reverse=True)
+    if not cleaned:
+        return None
+    alt = "|".join(re.escape(t) for t in cleaned)
+    if whole_word:
+        return re.compile(rf"(?<!\w)(?:{alt})(?!\w)")
+    return re.compile(alt)
+
+
+def _regex_for(terms, whole_word: bool):
+    return _term_regex(tuple(str(t) for t in (terms or ()) if t is not None), whole_word)
+
+
+def _find_term(text_lower: str, terms, whole_word: bool = True) -> str | None:
+    """Return the first configured keyword found in `text_lower`, else None."""
+    rx = _regex_for(terms, whole_word)
+    if rx is None:
+        return None
+    m = rx.search(text_lower)
+    return m.group(0) if m else None
+
+
+def _has_term(text_lower: str, term, whole_word: bool = True) -> bool:
+    return _find_term(text_lower, [term], whole_word) is not None
+
+
+def _title_rejection(title: str, rules: dict) -> str | None:
+    """Why `title` fails the title rules, or None if it passes. The single
+    implementation behind match_title (bool) and explain_match_rejection (text).
+
+    Inclusion keywords (tier / domain) stay case-insensitive SUBSTRINGS so
+    "security" still matches "Cybersecurity Engineer". Exclusions are matched
+    as WHOLE WORDS so "intern" no longer drops "Internal Tools" or
+    "International Security". List plural / stem variants ("interns")
+    explicitly in the config.
+    """
+    title_lower = (title or "").lower()
+    if not title_lower:
+        return "empty title"
+
+    tier_kw = rules.get("tier_keywords_in_title", []) or []
+    rx = _regex_for(tier_kw, whole_word=False)
+    if rx is not None and not rx.search(title_lower):
+        return f"title missing a tier keyword ({', '.join(map(str, tier_kw[:5]))}{'...' if len(tier_kw) > 5 else ''})"
+
+    domain_kw = rules.get("domain_keywords_in_title", []) or []
+    rx = _regex_for(domain_kw, whole_word=False)
+    if rx is not None and not rx.search(title_lower):
+        return f"title missing a domain keyword ({', '.join(map(str, domain_kw[:5]))}{'...' if len(domain_kw) > 5 else ''})"
+
+    excluded = _find_term(title_lower, rules.get("title_exclusions", []) or [], whole_word=True)
+    if excluded is not None:
+        return f"title contains excluded keyword '{excluded}'"
+
+    return None
 
 
 def match_title(job: Job, rules: dict) -> bool:
-    title_lower = job.title.lower()
-    if not title_lower:
-        return False
-
-    tier_kw = rules.get("tier_keywords_in_title", [])
-    if tier_kw and not any(k in title_lower for k in tier_kw):
-        return False
-
-    domain_kw = rules.get("domain_keywords_in_title", [])
-    if domain_kw and not any(k in title_lower for k in domain_kw):
-        return False
-
-    exclusions = rules.get("title_exclusions", [])
-    if any(ex in title_lower for ex in exclusions):
-        return False
-
-    return True
+    return _title_rejection(job.title, rules) is None
 
 
 def match_location(job: Job, rules: dict) -> bool:
@@ -454,7 +549,11 @@ def match_location(job: Job, rules: dict) -> bool:
 
 
 def is_anti_target(job: Job, filters: dict) -> tuple[bool, str]:
-    """Check job against anti-target patterns. Returns (matched, reason)."""
+    """Check job against anti-target patterns. Returns (matched, reason).
+
+    Job text and configured patterns are both lowercased, and a pattern matches
+    only as a whole word or phrase (so "waf" does not fire on "waffle").
+    """
     title_lower = job.title.lower()
     desc_lower = (job.description_text or "").lower()
     loc_lower = (job.location or "").lower()
@@ -477,27 +576,27 @@ def is_anti_target(job: Job, filters: dict) -> tuple[bool, str]:
 
         if title_any:
             conditions_specified = True
-            if not any(t in title_lower for t in title_any):
+            if _find_term(title_lower, title_any) is None:
                 all_matched = False
 
         if all_matched and desc_any:
             conditions_specified = True
-            if not any(d in desc_lower for d in desc_any):
+            if _find_term(desc_lower, desc_any) is None:
                 all_matched = False
 
         if all_matched and desc_all:
             conditions_specified = True
-            if not all(d in desc_lower for d in desc_all):
+            if not all(_has_term(desc_lower, d) for d in desc_all if str(d).strip()):
                 all_matched = False
 
-        if all_matched and desc_negate and any(n in desc_lower for n in desc_negate):
+        if all_matched and desc_negate and _find_term(desc_lower, desc_negate) is not None:
             all_matched = False
 
         if all_matched and loc_any:
             conditions_specified = True
-            if not any(l in loc_lower for l in loc_any):
+            if _find_term(loc_lower, loc_any) is None:
                 all_matched = False
-            elif loc_negate and any(n in loc_lower for n in loc_negate):
+            elif loc_negate and _find_term(loc_lower, loc_negate) is not None:
                 # Location matched anti-target but also has a negating keyword (e.g., "remote")
                 all_matched = False
 
@@ -576,33 +675,8 @@ def score_job(job: Job, scoring: dict) -> int:
     return score
 
 
-_LOC_ARRANGEMENT_PARENS = re.compile(
-    r"\s*\([^)]*\b(?:remote|hybrid|onsite|on-site|"
-    r"usa|us|united states|americas|emea|apac|na|"
-    r"east coast|west coast|north america|"
-    r"est|pst|cst|mst|edt|pdt|cdt|mdt)\b[^)]*\)",
-    re.IGNORECASE,
-)
-
-
-def normalize_title(title: str) -> str:
-    """Collapse regional/work-arrangement variants for fuzzy title matching.
-
-    Two-step normalization:
-    1. Take the chunk before ' | ' or ' - ' (handles "Director, IT Security - Remote")
-    2. Strip parenthesized groups containing location/arrangement keywords
-       (handles "Senior GRC Security Analyst (remote)" and "(Remote, USA)")
-
-    Both forms appear on board re-listings of the same posting. The parens-strip
-    is intentionally narrow: parens with level markers like "(L4)" / "(IC5)" are
-    PRESERVED so an L4 listing does not collapse with an L5 listing.
-
-    Without both steps, backfill dedup misses the case where the tracker holds
-    the bare title and the digest has the suffix-decorated variant.
-    """
-    first = re.split(r"\s*\|\s*|\s+-\s+", title, maxsplit=1)[0]
-    first = _LOC_ARRANGEMENT_PARENS.sub("", first)
-    return first.strip().lower()
+# normalize_title lives in dedup.py (imported above) so board dedup, backfill and
+# repeat-decline matching all share ONE normalizer.
 
 
 def explain_match_rejection(job: Job, rules: dict) -> str | None:
@@ -611,22 +685,9 @@ def explain_match_rejection(job: Job, rules: dict) -> str | None:
     in a scan, these get silently dropped; in an ingest, the user explicitly
     submitted each URL and wants to know why anything was rejected.
     """
-    title_lower = (job.title or "").lower()
-    if not title_lower:
-        return "empty title"
-
-    tier_kw = rules.get("tier_keywords_in_title", [])
-    if tier_kw and not any(k in title_lower for k in tier_kw):
-        return f"title missing a tier keyword ({', '.join(tier_kw[:5])}{'...' if len(tier_kw) > 5 else ''})"
-
-    domain_kw = rules.get("domain_keywords_in_title", [])
-    if domain_kw and not any(k in title_lower for k in domain_kw):
-        return f"title missing a domain keyword ({', '.join(domain_kw[:5])}{'...' if len(domain_kw) > 5 else ''})"
-
-    exclusions = rules.get("title_exclusions", [])
-    for ex in exclusions:
-        if ex in title_lower:
-            return f"title contains excluded keyword '{ex}'"
+    title_reason = _title_rejection(job.title, rules)
+    if title_reason is not None:
+        return title_reason
 
     if rules.get("require_remote", False):
         loc_lower = (job.location or "").lower()
@@ -689,18 +750,52 @@ def fetch_all_jobs(companies: dict, verify_mode: bool = False) -> list[Job]:
     return all_jobs
 
 
-def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_dir: Path) -> Path:
+def enrich_description(job: Job) -> bool:
+    """Fetch a missing job description from the job's own ATS, if that ATS needs it.
+
+    Scrapers flag such jobs with `raw["description_pending"]` (SmartRecruiters'
+    list endpoint returns summaries only). Returns True when a description was
+    filled in. One network call per job, so callers invoke it only after the
+    cheap title/location filters have passed.
     """
-    Write a markdown digest.
+    if job.description_text or not (job.raw or {}).get("description_pending"):
+        return False
+    scraper = SCRAPER_REGISTRY.get(job.id.split(":", 1)[0])
+    if scraper is None:
+        return False
+    try:
+        return bool(scraper.enrich_job(job))
+    except Exception as e:  # never let one flaky detail call abort the scan
+        logging.warning("%s: could not fetch description: %s", job.company, e)
+        return False
+
+
+def write_digest(
+    results: list[tuple[int, Job, bool, str]],
+    stats: dict,
+    digest_dir: Path,
+    dry_run: bool = False,
+) -> Path:
+    """
+    Write a markdown digest to a NEW file; never overwrite an existing one.
+
+    Real run:  digest-YYYY-MM-DD-HHMMSS.md   (what /backfill reads)
+    Dry run:   dryrun-YYYY-MM-DD-HHMMSS.md   (previewed by hand, never read by
+               /backfill or "latest digest" lookups, so it cannot masquerade as
+               a real digest whose jobs were never marked seen)
+
+    A second run on the same day used to overwrite the first digest even
+    though the first run's jobs were already marked seen, losing them.
 
     results: list of (score, job, is_match, anti_target_reason).
         is_match=True and anti_target_reason="" -> matched job
         is_match=False and anti_target_reason set -> anti-target
         is_match=False and anti_target_reason="" -> silently filtered (not in digest)
     """
-    today_str = datetime.now(LOCAL_TZ).date().isoformat()
-    digest_dir.mkdir(parents=True, exist_ok=True)
-    out_path = digest_dir / f"digest-{today_str}.md"
+    now = local_now()
+    today_str = now.date().isoformat()
+    stamp = now.strftime("%H%M%S")
+    file_prefix = "dryrun" if dry_run else "digest"
 
     matches = sorted([x for x in results if x[2]], key=lambda x: -x[0])
     skipped_anti = [x for x in results if not x[2] and x[3]]
@@ -710,7 +805,8 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_
         by_tier.setdefault(item[1].company_tier, []).append(item)
 
     lines: list[str] = []
-    lines.append(f"# Job Discovery Digest - {today_str}")
+    title_suffix = " (DRY RUN - state not updated)" if dry_run else ""
+    lines.append(f"# Job Discovery Digest - {today_str} {stamp[:2]}:{stamp[2:4]}:{stamp[4:6]}{title_suffix}")
     lines.append("")
     lines.append(f"- **Companies scanned:** {stats['companies_scanned']}")
     lines.append(f"- **Total jobs fetched:** {stats['total_fetched']}")
@@ -797,8 +893,7 @@ def write_digest(results: list[tuple[int, Job, bool, str]], stats: dict, digest_
                 lines.append(f"- **Sample roles:** {'; '.join(titles[:3])}")
             lines.append("")
 
-    out_path.write_text("\n".join(lines))
-    return out_path
+    return write_new_text(digest_dir, f"{file_prefix}-{today_str}-{stamp}", "\n".join(lines))
 
 
 def _build_manual_jobs(postings: list[dict]) -> tuple[list[Job], list[dict]]:
@@ -876,11 +971,9 @@ def write_ingest_digest(
         is_match=False, anti_target_reason!="" -> anti-target hit
         is_match=False, filter_reason!=""     -> filtered by match_rules; reason explains which
     """
-    now = datetime.now(LOCAL_TZ)
+    now = local_now()
     today_str = now.date().isoformat()
     stamp = now.strftime("%H%M%S")
-    digest_dir.mkdir(parents=True, exist_ok=True)
-    out_path = digest_dir / f"ingest-{today_str}-{stamp}.md"
 
     matches = sorted([x for x in results if x[2]], key=lambda x: -x[0])
     anti_hits = [x for x in results if not x[2] and x[3]]
@@ -993,8 +1086,7 @@ def write_ingest_digest(
             lines.append(f"- {reason}{' - ' + url if url else ''}")
         lines.append("")
 
-    out_path.write_text("\n".join(lines))
-    return out_path
+    return write_new_text(digest_dir, f"ingest-{today_str}-{stamp}", "\n".join(lines))
 
 
 def run_ingest(
@@ -1015,7 +1107,7 @@ def run_ingest(
     the JD changed, and manual ingest should never silently filter on repeat.
     """
     try:
-        raw = json.loads(postings_path.read_text())
+        raw = json.loads(postings_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
         print(f"ERROR: Could not read postings file {postings_path}: {e}")
         return 1
@@ -1101,7 +1193,7 @@ def run_ingest(
 
 
 def parse_digest_matches(path: Path, digest_date: date) -> list[dict]:
-    """Extract matched jobs from a `digest-YYYY-MM-DD.md` file.
+    """Extract matched jobs from a `digest-YYYY-MM-DD[-HHMMSS].md` file.
 
     Returns list of dicts with keys: company, title, score, url, location,
     posted_at (date or None), tier, digest_date, source ('ats' or 'board').
@@ -1111,7 +1203,7 @@ def parse_digest_matches(path: Path, digest_date: date) -> list[dict]:
     if not path.exists():
         return []
     try:
-        lines = path.read_text().splitlines()
+        lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
 
@@ -1198,11 +1290,9 @@ def write_backfill_digest(
     digest_dir: Path,
 ) -> Path:
     """Render the backfill digest with aggregated sighting info per posting."""
-    now = datetime.now(LOCAL_TZ)
+    now = local_now()
     today_str = now.date().isoformat()
     stamp = now.strftime("%H%M%S")
-    digest_dir.mkdir(parents=True, exist_ok=True)
-    out_path = digest_dir / f"backfill-{today_str}-{stamp}.md"
 
     lines: list[str] = []
     lines.append(f"# Backfill Digest - {today_str} {stamp[:2]}:{stamp[2:4]}:{stamp[4:6]}")
@@ -1225,8 +1315,7 @@ def write_backfill_digest(
     if not candidates:
         lines.append("_No backfill candidates matched the filters._")
         lines.append("")
-        out_path.write_text("\n".join(lines))
-        return out_path
+        return write_new_text(digest_dir, f"backfill-{today_str}-{stamp}", "\n".join(lines))
 
     lines.append("---")
     lines.append("")
@@ -1253,8 +1342,7 @@ def write_backfill_digest(
         lines.append(f"- **Apply:** {c['url']}")
         lines.append("")
 
-    out_path.write_text("\n".join(lines))
-    return out_path
+    return write_new_text(digest_dir, f"backfill-{today_str}-{stamp}", "\n".join(lines))
 
 
 def run_backfill(
@@ -1277,13 +1365,13 @@ def run_backfill(
 
     cutoff: date | None = None
     if days > 0:
-        cutoff = datetime.now(LOCAL_TZ).date() - timedelta(days=days)
+        cutoff = local_now().date() - timedelta(days=days)
 
     digest_files = sorted(digest_dir.glob("digest-*.md"))
     all_entries: list[dict] = []
     digests_scanned = 0
     for path in digest_files:
-        m = re.match(r"^digest-(\d{4}-\d{2}-\d{2})\.md$", path.name)
+        m = DIGEST_NAME_RE.match(path.name)
         if not m:
             continue
         try:
@@ -1339,7 +1427,9 @@ def run_backfill(
             agg["appearance_count"] += 1
             if score > agg["highest_score"]:
                 agg["highest_score"] = score
-            if entry["digest_date"] > agg["last_seen_date"]:
+            # >= so that among several digests from the same day, the one
+            # processed last (files are sorted by name, i.e. by time) wins.
+            if entry["digest_date"] >= agg["last_seen_date"]:
                 agg["last_seen_date"] = entry["digest_date"]
                 agg["latest_score"] = score
                 # Refresh display fields from the most-recent sighting
@@ -1398,6 +1488,12 @@ def main() -> int:
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
+    # Windows consoles default to a legacy code page; company and role names
+    # with non-ASCII characters must not crash a print().
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
     # URL normalization short-circuit - no config/state needed.
     if args.normalize_url_cli:
         print(normalize_url(args.normalize_url_cli))
@@ -1409,6 +1505,7 @@ def main() -> int:
     )
 
     framework_config = load_framework_config(args.config)
+    configure_timezone(framework_config)
     config_dir, state_file, digest_dir = resolve_paths(framework_config)
 
     if framework_config:
@@ -1459,7 +1556,14 @@ def main() -> int:
     companies = load_yaml(config_dir / "companies.yaml")
     keywords = load_yaml(config_dir / "keywords.yaml")
     filters = load_yaml(config_dir / "filters.yaml")
-    state = load_state(state_file)
+    try:
+        state = load_state(state_file)
+    except StateFileError as e:
+        print(f"ERROR: {e}")
+        print("  The state file is left untouched. Refusing to continue: starting from an empty")
+        print("  state would mark every posting as new and flood the digest.")
+        print(f"  Restore it from {state_file.name}.bak (if present), or delete it to start over.")
+        return 1
 
     total_companies = sum(1 for _ in iter_company_entries(companies))
     manual_check_count = len(companies.get("manual_check") or []) if isinstance(companies.get("manual_check"), list) else 0
@@ -1486,6 +1590,9 @@ def main() -> int:
         all_jobs.extend(board_jobs)
     else:
         logging.info("JobSpy disabled - set jobspy.enabled: true in keywords.yaml to activate")
+
+    # Every id fetched this run, captured BEFORE dedup (see refresh_seen_ids).
+    fetched_ids = [j.id for j in all_jobs]
 
     # Cross-source dedup (removes board duplicates when ATS version exists)
     if board_jobs:
@@ -1565,6 +1672,14 @@ def main() -> int:
             continue
         if not match_location(job, match_rules):
             continue
+        # Some ATS list endpoints carry no job description (SmartRecruiters).
+        # Fetch it only now, for jobs that already passed the title and location
+        # gates, then re-run the anti-target patterns that read the description.
+        if enrich_description(job):
+            is_anti, reason = is_anti_target(job, filters)
+            if is_anti:
+                results.append((0, job, False, reason))
+                continue
         score = score_job(job, scoring)
         results.append((score, job, True, ""))
 
@@ -1607,7 +1722,7 @@ def main() -> int:
         "repeat_decline_filtered": repeat_decline_filtered,
         "candidate_companies": candidates_mod.promotable_candidates(candidates_state),
     }
-    out_path = write_digest(results, stats, digest_dir)
+    out_path = write_digest(results, stats, digest_dir, dry_run=args.dry_run)
     print(f"Digest written to: {out_path}")
 
     matches_count = sum(1 for _, _, m, _ in results if m)
@@ -1615,10 +1730,12 @@ def main() -> int:
     print(f"Matches surfaced: {matches_count} | Anti-target skipped: {skipped_count}")
 
     if not args.dry_run:
+        # Refresh the timestamp of EVERY id seen this run (before cross-source
+        # dedup, so board duplicates dropped in favour of an ATS copy stay fresh
+        # too). Otherwise long-open postings age out after SEEN_ID_MAX_AGE_DAYS
+        # and come back as "new".
         now_iso = datetime.now(timezone.utc).isoformat()
-        new_seen = {j.id: now_iso for j in all_jobs if j.id not in raw_seen}
-        raw_seen.update(new_seen)
-        state["seen_ids"] = raw_seen
+        state["seen_ids"] = refresh_seen_ids(raw_seen, fetched_ids, now_iso)
         save_state(state, state_file)
 
     return 0

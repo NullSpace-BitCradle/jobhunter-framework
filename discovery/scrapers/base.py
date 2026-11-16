@@ -133,3 +133,9 @@ class Scraper:
         timeout: int | None = None,
     ) -> list[Job]:
         raise NotImplementedError
+
+    def enrich_job(self, job: Job) -> bool:
+        """Fill in `job.description_text` with one extra request, when this ATS's
+        list endpoint omits it. Called only for jobs that passed the title and
+        location filters. Returns True if a description was added. Default: no-op."""
+        return False
